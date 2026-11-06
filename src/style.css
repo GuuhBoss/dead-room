@@ -1,0 +1,154 @@
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: #121212; overflow: hidden; }
+body {
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-family: 'Lilita One', 'Arial Black', Impact, sans-serif;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+#stage { position: relative; box-shadow: 0 0 0 1px #000, 0 24px 80px #000; }
+#game { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+#ui { position: absolute; left: 0; top: 0; width: 1280px; height: 816px; transform-origin: 0 0; pointer-events: none; }
+[hidden] { display: none !important; }
+
+button { font: inherit; color: inherit; cursor: pointer; border: 0; background: none; }
+button:focus-visible { outline: 3px solid #ffcf3a; outline-offset: 3px; }
+kbd {
+  display: inline-block;
+  min-width: 22px;
+  padding: 2px 6px;
+  margin: 0 1px;
+  border: 2px solid #111;
+  border-bottom-width: 4px;
+  border-radius: 4px;
+  background: #f4f2ec;
+  color: #111;
+  font: 13px/1.2 'Lilita One', 'Arial Black', sans-serif;
+  text-align: center;
+}
+
+.screen {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+}
+#menu { gap: 22px; background: radial-gradient(ellipse at 50% 45%, rgba(18, 14, 10, 0.25), rgba(10, 8, 6, 0.8)); }
+.dim { background: rgba(12, 10, 8, 0.62); }
+
+.logo { text-align: center; }
+.logo h1 {
+  margin: 0;
+  font-size: 136px;
+  font-weight: 400;
+  line-height: 0.88;
+  letter-spacing: 3px;
+  -webkit-text-stroke: 14px #111;
+  paint-order: stroke fill;
+  text-shadow: 0 9px 0 #111;
+}
+.logo h1 span:last-child { color: #e2441a; }
+.logo p { margin: 16px 0 0; font-size: 21px; color: #f0e6d4; -webkit-text-stroke: 5px #111; paint-order: stroke fill; }
+
+.panel {
+  width: 900px;
+  display: grid;
+  gap: 16px;
+  padding: 22px 26px 18px;
+  background: rgba(16, 16, 16, 0.88);
+  border: 3px solid #000;
+  border-radius: 10px;
+  box-shadow: 0 10px 0 rgba(0, 0, 0, 0.45);
+}
+.label { margin-bottom: 8px; font: 600 13px/1 system-ui, sans-serif; letter-spacing: 3px; text-transform: uppercase; color: #a39a8c; }
+.label .hint { margin-left: 10px; letter-spacing: 1px; text-transform: none; color: #6f685e; }
+.seg { display: flex; gap: 10px; }
+.seg button, .room, .ghost {
+  border: 3px solid #000;
+  border-radius: 7px;
+  background: #2b2a28;
+  color: #cfc8bb;
+  box-shadow: inset 0 -5px 0 rgba(0, 0, 0, 0.35);
+}
+.seg button { flex: 1; padding: 11px; font-size: 25px; }
+.seg button.on, .room.on { background: #f4f2ec; color: #111; }
+.seg button:hover:not(.on), .room:hover:not(.on), .ghost:hover { background: #3a3835; }
+
+.rooms { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.room { padding: 7px 7px 9px; text-align: left; }
+.room canvas { display: block; width: 100%; border-radius: 3px; border: 2px solid #000; }
+.room b { display: block; margin-top: 7px; font-size: 21px; font-weight: 400; }
+.room small, .room em { display: block; font: 600 11px/1.5 system-ui, sans-serif; font-style: normal; color: #8f887c; }
+.room.on small, .room.on em { color: #6b6457; }
+.room em { color: #d9893c; }
+.room.on em { color: #c3541c; }
+
+.actions { display: flex; gap: 12px; }
+.play {
+  flex: 1;
+  padding: 13px 18px;
+  border: 3px solid #000;
+  border-radius: 8px;
+  background: #e2441a;
+  color: #fff;
+  font-size: 34px;
+  box-shadow: inset 0 -7px 0 rgba(0, 0, 0, 0.25), 0 5px 0 #000;
+  -webkit-text-stroke: 5px #111;
+  paint-order: stroke fill;
+}
+.play:hover { background: #f05226; }
+.play kbd { vertical-align: 6px; -webkit-text-stroke: 0; margin-left: 10px; }
+.ghost { padding: 10px 18px; font-size: 21px; }
+.ghost.small { flex: 0 0 auto; font-size: 18px; }
+
+.keys { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 24px; font: 600 13px/1.9 system-ui, sans-serif; color: #b6ae9f; }
+.keys b { margin-right: 4px; font: 16px 'Lilita One', sans-serif; color: #fff; }
+.keys .pads { color: #7c766c; }
+
+.card {
+  min-width: 480px;
+  padding: 30px 40px 26px;
+  text-align: center;
+  background: rgba(16, 16, 16, 0.92);
+  border: 3px solid #000;
+  border-radius: 10px;
+  box-shadow: 0 10px 0 rgba(0, 0, 0, 0.45);
+}
+.card h2 { margin: 0 0 20px; font-size: 76px; font-weight: 400; line-height: 1; -webkit-text-stroke: 10px #111; paint-order: stroke fill; }
+.stack { display: grid; gap: 10px; margin-bottom: 18px; }
+.card .keys { max-width: 600px; }
+.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 22px; }
+.stats div { padding: 9px 14px; text-align: left; background: #252422; border: 2px solid #000; border-radius: 6px; }
+.stats span { display: block; font: 600 11px/1.4 system-ui, sans-serif; letter-spacing: 2px; text-transform: uppercase; color: #9a9284; }
+.stats b { font-size: 27px; font-weight: 400; }
+
+#touch { position: absolute; inset: 0; pointer-events: none; }
+#stickzone { position: absolute; left: 0; top: 100px; bottom: 0; width: 55%; pointer-events: auto; touch-action: none; }
+#stick { position: absolute; width: 0; height: 0; }
+#stick::before, #knob {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  border: 3px solid rgba(0, 0, 0, 0.6);
+}
+#stick::before { left: -62px; top: -62px; width: 124px; height: 124px; background: rgba(255, 255, 255, 0.14); }
+#knob { left: -30px; top: -30px; width: 60px; height: 60px; background: rgba(255, 255, 255, 0.55); }
+#touch button {
+  position: absolute;
+  pointer-events: auto;
+  touch-action: none;
+  border: 4px solid rgba(0, 0, 0, 0.7);
+  border-radius: 50%;
+  color: #fff;
+  -webkit-text-stroke: 4px #111;
+  paint-order: stroke fill;
+}
+#t-fire { right: 48px; bottom: 70px; width: 160px; height: 160px; font-size: 36px; background: rgba(226, 68, 26, 0.6); }
+#t-swap { right: 230px; bottom: 80px; width: 100px; height: 100px; font-size: 22px; background: rgba(255, 255, 255, 0.22); }
+#t-pause { right: 20px; top: 70px; width: 64px; height: 64px; font-size: 24px; background: rgba(0, 0, 0, 0.35); }

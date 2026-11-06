@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#121212">
+<title>Dead Rooms · a Boxhead 2Play Rooms tribute</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath fill='%23222' d='M6 2h20v16H6z'/%3E%3Cpath fill='%23eef2f3' d='M4 18h24v12H4z'/%3E%3Cpath fill='%23e2441a' d='M10 8h4v3h-4zm8 0h4v3h-4z'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lilita+One&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="stage">
+  <canvas id="game" aria-label="Dead Rooms play area"></canvas>
+  <div id="ui">
+    <section id="menu" class="screen">
+      <header class="logo">
+        <h1><span>DEAD</span> <span>ROOMS</span></h1>
+        <p>Zombie survival for one or two players · a Boxhead: 2Play Rooms tribute</p>
+      </header>
+      <div class="panel">
+        <div class="row">
+          <div class="label">Players</div>
+          <div class="seg" id="modes"><button data-mode="1">1 Player</button><button data-mode="2">2 Players</button></div>
+        </div>
+        <div>
+          <div class="label">Room <span class="hint">← → to browse</span></div>
+          <div class="rooms" id="rooms"></div>
+        </div>
+        <div class="actions">
+          <button id="play" class="play">Play <kbd>Enter</kbd></button>
+          <button id="fullscreen" class="ghost small">Fullscreen</button>
+        </div>
+        <div class="keys" id="keys"></div>
+      </div>
+    </section>
+
+    <section id="pause" class="screen dim" hidden>
+      <div class="card">
+        <h2>Paused</h2>
+        <div class="stack">
+          <button id="resume" class="play">Resume</button>
+          <button id="restart" class="ghost">Restart room</button>
+          <button id="sound" class="ghost">Sound: on</button>
+          <button id="fullscreen2" class="ghost">Fullscreen</button>
+          <button id="quit" class="ghost">Quit to menu</button>
+        </div>
+        <div class="keys" id="pausekeys"></div>
+      </div>
+    </section>
+
+    <section id="over" class="screen dim" hidden>
+      <div class="card">
+        <h2 id="overtitle">Overrun</h2>
+        <div class="stats" id="stats"></div>
+        <div class="stack">
+          <button id="again" class="play">Play again <kbd>Enter</kbd></button>
+          <button id="tomenu" class="ghost">Menu</button>
+        </div>
+      </div>
+    </section>
+
+    <div id="touch" hidden>
+      <div id="stickzone"><div id="stick" hidden><div id="knob"></div></div></div>
+      <button id="t-swap" aria-label="Switch weapon">SWAP</button>
+      <button id="t-fire" aria-label="Fire">FIRE</button>
+      <button id="t-pause" aria-label="Pause">II</button>
+    </div>
+  </div>
+</div>
+<script src="game.js"></script>
+</body>
+</html>
