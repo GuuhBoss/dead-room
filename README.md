@@ -1,61 +1,75 @@
 # Dead Rooms
 
-An unofficial tribute to Sean Cooper's *Boxhead: 2Play Rooms*, written from scratch with Canvas 2D and Web Audio. No original assets are used: every character is built from lit 3D boxes, and every sound is synthesized.
+A Canvas/Web Audio recreation targeting the original **Boxhead: 2Play Rooms**
+(2007). Online multiplayer and server-verified rankings are the requested
+additions. Original-version art, fonts and sound are bundled; ads and
+publisher/developer branding are omitted.
 
-## Running
+Single player, local cooperative play and split-screen deathmatch are
+implemented, along with online solo/co-op/deathmatch and persistent survival
+rankings. The server controls combat, unlocks and scores; clients send inputs.
+Original room geometry and progression were independently checked against the
+publisher's binary. Original assets now drive the renderer and audio. Remaining
+presentation differences and limits of the comparison are recorded below;
+see the fidelity report.
 
-Needs Node 20 or newer. There are no dependencies, so there is nothing to install.
+## Run
+
+Requires Node >=20 and pnpm.
 
 ```sh
-pnpm start        # build, then serve dist/ on http://localhost:3330
-pnpm dev          # serve and rebuild whenever src/ changes
-pnpm build        # only write dist/
-pnpm test         # server tests
+pnpm install
+pnpm start       # build and serve on http://localhost:3330
+pnpm dev         # build, serve and watch src/
+pnpm build       # dist/ plus standalone dist/dead-rooms.html
+pnpm test
 ```
 
-`PORT` and `HOST` override the defaults (3330 and 0.0.0.0). Under pm2, `pm2 start ecosystem.config.cjs --only dead-rooms` runs the production server on 3330 and `dead-rooms-dev` runs the watcher on 3331.
+`HOST` and `PORT` override the listener. `DATA_DIR` sets persistent ranking
+storage (default ignored `data/`). Run one server process per data directory.
+Behind a TLS proxy set `ALLOWED_ORIGINS` to the exact public origin; see
+[backend documentation](docs/backend.md) for limits and deployment settings.
 
-After a build you can also open `dist/index.html` straight from disk, or share `dist/dead-rooms.html`, a single file with the CSS and JS inlined that works offline (only the Lilita One font comes from Google Fonts).
+## Controls and rules
 
-## Playing
+Original P1 controls: arrows move, `/` fires, comma/period switch weapons.
+Solo also supports Space and number keys 1–9,0. P2 uses WASD, Space, Q/E.
+P pauses offline games; M toggles sound. The recreation also has
+single-player WASD aliases, gamepad and touch controls.
 
-- **1 player:** WASD or arrow keys to move, Space to shoot, Q/E or 1–9 to switch weapons.
-- **2 players:** P1 uses WASD, Space, and Q/E. P2 uses the arrow keys, Enter, and , / . to switch.
-- **Gamepads:** stick or d-pad to move, A/X/RT to fire, LB/RB to switch, Start to pause.
-- **Touch:** a floating stick on the left, plus FIRE and SWAP buttons.
-- Esc or P pauses. M toggles sound.
+Shared tables now contain eighteen original room symbols, ten weapons and all
+58 upgrade milestones through x125. Unlocks: pistol x1, Uzi x5, shotgun x10,
+barrels x15, grenades x20, fake walls x30, claymore x40, rockets x50, charge packs
+x55, railgun x70. Each kill raises the multiplier by one; decay accelerates at
+higher multipliers. Normal speed runs 25 original logic ticks per second.
 
-You shoot in the direction you face, and characters face eight directions, as in the original. Zombies pour in through the doors. Each kill fills the multiplier ring, and the ring drains over time or when you get hit. New multiplier highs unlock weapons and upgrades:
+The server consumes bounded input messages over WebSocket `/online`, runs the
+same shared simulation, and records actual completed survival runs. Clients
+cannot submit a score. GET `/api/leaderboard` provides filtered persistent
+rankings; online solo and co-op are separate categories. Offline games are
+unranked. Online deathmatch defaults to ten frags, matching the original;
+offline options allow 5/10/20/50. Deathmatch results stay out of survival rankings.
+See the [protocol](docs/online-contract.md).
 
-| Multiplier | Unlock |
-|---|---|
-| x2 | Uzi |
-| x3 | Pistol rapid fire |
-| x4 | Shotgun |
-| x5 | Uzi hollow points |
-| x6 | Barrels (placeable, explosive) |
-| x7 | Shotgun wide spread |
-| x8 | Grenades |
-| x9 | Pistol double damage |
-| x10 | Fake walls (the horde has to claw through them) |
-| x11 | Bigger barrel blasts |
-| x12 | Rockets |
-| x13 | Uzi rapid fire |
-| x14 | Mines |
-| x15 | Bigger rocket blasts |
-| x16 | Railgun (pierces everything) |
-| x17+ | Supply drops |
+## Fidelity and validation
 
-Red crates refill your ammo and white crates restore health. Health also regenerates slowly when you avoid damage. Devils show up from level 3 and throw fireballs. Explosions chain through barrels and mines, and they hurt you too. In co-op, a downed player gets back up if their partner stands next to them, or automatically at the next level.
+[Original-game research and known gaps](docs/frontend-research.md) records the
+publisher binary URL/hash, extracted rules, independent progression comparison,
+browser checks and remaining differences. [Acceptance checklist](docs/fidelity-validation.md)
+tracks the orchestrator's validation. No later Boxhead game's content is intended.
+All61 automated tests currently pass. Independent Chromium checks cover local
+deathmatch, two-client co-op/deathmatch, aborts and exact-ID survival ranking.
+Original fonts,29 sprite strips,26 sound samples and18 room definitions load;
+the standalone HTML plays with no HTTP requests. The original logo, menu
+backdrops and four instruction sections are included. Every room's floor,
+cover and mask decodes, and all four players plus zombies/devils render in
+cardinal directions. Browser rendering/audio differences remain documented;
+pixel-exact Flash Player parity is not claimed.
 
-There are four rooms: The Gates, Crossroads, The Bunker, and Pillar Hall. The best score is saved per room and per player count.
-
-## Code
-
-The source is in `src/`, split by concern (data, world and navigation, combat, box figures, scene, HUD and audio, input and flow). The files are plain scripts sharing one scope, loaded in numeric order. `build.mjs` joins them into `dist/game.js` and writes the single-file HTML; `server.mjs` is a small static server for `dist/`.
-
-- Zombies follow a per-player flow field (Dijkstra on the room grid), chase directly when they have line of sight, and treat fake walls as expensive but passable.
-- Characters are posed as rotated boxes, shaded by face normal, and drawn in depth order. Common zombie poses are cached as small images along with their shadows.
-- Shadows are drawn with an opaque shade colour using the `darken` blend, so overlapping shadows merge instead of stacking.
-
-`window.deadRooms` exposes snapshot, step, and freeze hooks for automated checks.
+`src/01-data.js` contains rules/maps; `02-world.js` collision/navigation;
+`03-combat.js` shared simulation; `04-figures.js` models; `05-scene.js` rendering;
+`06-hud.js` HUD/audio; `07-main.js` input and UI; `08-net.js` online/rankings;
+`09-boot.js` startup. Build joins numeric scripts.
+The backend loads trusted shared simulation code in a per-room VM with graphics
+stubs. `window.deadRooms` exposes local browser inspection hooks; no debug state
+mutation is exposed over the network.

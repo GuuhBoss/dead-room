@@ -1,32 +1,65 @@
 // ─── Input ──────────────────────────────────────────────────────────────────
+// Original defaults (CSaveData): player 1 on the arrows with / to shoot and
+// , . to switch; player 2 on WASD with Space and Q / E. In single player
+// Space also shoots and the number keys pick weapons. WASD and Q / E are
+// extra single-player bindings here; they do not change play.
 const keys = new Set(), pressed = new Set();
-const BINDS = {
-  solo: { up: ['KeyW', 'ArrowUp'], down: ['KeyS', 'ArrowDown'], left: ['KeyA', 'ArrowLeft'], right: ['KeyD', 'ArrowRight'], fire: ['Space', 'KeyJ'], prev: ['KeyQ', 'KeyZ'], next: ['KeyE', 'KeyX'] },
-  p1: { up: ['KeyW'], down: ['KeyS'], left: ['KeyA'], right: ['KeyD'], fire: ['Space', 'KeyG'], prev: ['KeyQ'], next: ['KeyE'] },
-  p2: { up: ['ArrowUp'], down: ['ArrowDown'], left: ['ArrowLeft'], right: ['ArrowRight'], fire: ['Enter', 'NumpadEnter', 'Slash', 'Numpad0'], prev: ['Comma'], next: ['Period'] },
+// CScreen_SelectWorld's Controls window: each player can rebind these seven.
+const ACTIONS = [['fire', 'Shoot / use'], ['up', 'Move up'], ['down', 'Move down'], ['left', 'Move left'], ['right', 'Move right'], ['next', 'Next weapon'], ['prev', 'Previous weapon']];
+const DEFAULT_KEYS = {
+  p1: { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight', fire: 'Slash', next: 'Period', prev: 'Comma' },
+  p2: { up: 'KeyW', down: 'KeyS', left: 'KeyA', right: 'KeyD', fire: 'Space', next: 'KeyE', prev: 'KeyQ' },
 };
-const GAME_KEYS = new Set(['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter', 'NumpadEnter', 'Slash', 'Quote', 'Tab']);
-const touch = { on: false, dx: 0, dy: 0, fire: false, swap: false };
+const RESERVED = /^(Escape|KeyP|KeyM|Tab|Enter|F\d+|Digit\d|Numpad\d|Meta.*|OS.*)$/;
+let keymap = (() => {
+  try {
+    const saved = JSON.parse(localStorage.getItem('deadrooms:keys'));
+    if (saved && ['p1', 'p2'].every(p => ACTIONS.every(([a]) => typeof saved[p]?.[a] === 'string' && !RESERVED.test(saved[p][a])))) return saved;
+  } catch {}
+  return JSON.parse(JSON.stringify(DEFAULT_KEYS));
+})();
+let BINDS = null;
+// Single player uses player 1's keys plus Space and the number keys. With the
+// default keys WASD and Q / E work too; they are extras and change no rules.
+function rebuildBinds() {
+  const one = map => Object.fromEntries(ACTIONS.map(([a]) => [a, [map[a]].concat(map[a] === 'Slash' ? ['NumpadDivide'] : [])]));
+  const p1 = one(keymap.p1), p2 = one(keymap.p2), solo = one(keymap.p1);
+  if (!solo.fire.includes('Space')) solo.fire.push('Space');
+  if (JSON.stringify(keymap) === JSON.stringify(DEFAULT_KEYS)) {
+    solo.up.push('KeyW'); solo.down.push('KeyS'); solo.left.push('KeyA'); solo.right.push('KeyD'); solo.prev.push('KeyQ'); solo.next.push('KeyE');
+  }
+  BINDS = { solo, p1, p2 };
+}
+rebuildBinds();
+const GAME_KEYS = new Set(['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Slash', 'Quote', 'Tab', 'Comma', 'Period']);
+const touch = { on: false, used: false, dx: 0, dy: 0, fire: false, swap: false, tap: false };
 const pads = { list: [], prev: new Map() };
+const scripted = [null, null]; // test hook: fixed input per player
+const DIGIT_WEAPON = code => { const m = /^(?:Digit|Numpad)(\d)$/.exec(code); return m ? (Number(m[1]) + 9) % 10 : -1; };
 
-function gatherInput(p) {
-  const b = BINDS[game.mode === 1 ? 'solo' : p.id ? 'p2' : 'p1'];
+function bindsFor(id) { return game.mode === 1 || game.online ? BINDS.solo : id ? BINDS.p2 : BINDS.p1; }
+
+// One local player's input; the same shape is sent to the server online.
+function readLocal(id) {
+  const b = bindsFor(id);
   const held = list => list.some(k => keys.has(k)), hit = list => list.some(k => pressed.has(k));
-  const input = { dx: held(b.right) - held(b.left), dy: held(b.down) - held(b.up), fire: held(b.fire), prev: hit(b.prev), next: hit(b.next), select: -1 };
-  if (p.id === 0) for (let i = 0; i < 9; i++) if (pressed.has(`Digit${i + 1}`)) input.select = i;
-  const pad = padFor(p.id);
+  const input = { dx: held(b.right) - held(b.left), dy: held(b.down) - held(b.up), fire: held(b.fire), prev: hit(b.prev), next: hit(b.next), select: -1, tap: hit(b.fire) };
+  if (b === BINDS.solo) for (const code of pressed) { const w = DIGIT_WEAPON(code); if (w >= 0) input.select = w; }
+  const pad = padFor(id);
   if (pad) {
     if (pad.dx || pad.dy) { input.dx = pad.dx; input.dy = pad.dy; }
-    input.fire ||= pad.fire; input.prev ||= pad.prev; input.next ||= pad.next;
+    input.fire ||= pad.fire; input.tap ||= pad.tap; input.prev ||= pad.prev; input.next ||= pad.next;
   }
-  if (p.id === 0 && touch.on) {
+  if (id === 0 && touch.on) {
     if (touch.dx || touch.dy) { input.dx = touch.dx; input.dy = touch.dy; }
-    input.fire ||= touch.fire;
-    input.next ||= touch.swap;
-    touch.swap = false;
+    input.fire ||= touch.fire; input.tap ||= touch.tap; input.next ||= touch.swap;
+    touch.swap = touch.tap = false;
   }
   return input;
 }
+
+function gatherInput(p) { return readLocal(p.id); }
+function autoInput(p) { return scripted[p.id] || { dx: 0, dy: 0, fire: false, prev: false, next: false, select: -1 }; }
 
 function pollPads() {
   const raw = navigator.getGamepads ? Array.from(navigator.getGamepads()).filter(g => g && g.connected) : [];
@@ -37,237 +70,418 @@ function pollPads() {
     const edge = i => held[i] && !prev[i];
     let dx = g.axes[0] || 0, dy = g.axes[1] || 0;
     if (Math.hypot(dx, dy) < 0.4) dx = dy = 0;
+    else { const a = Math.round(Math.atan2(dy, dx) / OCT) * OCT; dx = Math.round(Math.cos(a)); dy = Math.round(Math.sin(a)); }
     if (held[14]) dx = -1;
     if (held[15]) dx = 1;
     if (held[12]) dy = -1;
     if (held[13]) dy = 1;
-    return { dx, dy, fire: held[0] || held[2] || held[7], prev: edge(4), next: edge(5) || edge(3), start: edge(9), a: edge(0), left: edge(14), right: edge(15) };
+    return { dx, dy, fire: held[0] || held[2] || held[7], tap: edge(0) || edge(2) || edge(7), prev: edge(4), next: edge(5) || edge(3), start: edge(9) };
   });
-  for (const pad of pads.list) {
-    if (pad.start) { if (game.state === 'playing') setPaused(true); else if (game.state === 'paused') setPaused(false); }
-    if (pad.a && (game.state === 'menu' || (game.state === 'over' && performance.now() - game.overAt > 800))) startGame();
-    if (game.state === 'menu' && (pad.left || pad.right)) chooseRoom(menu.room + (pad.left ? -1 : 1));
-  }
+  for (const pad of pads.list) if (pad.start) togglePause();
 }
 
 // One pad drives player 1 in solo; in co-op a lone pad goes to player 2.
 function padFor(id) {
   const l = pads.list;
-  if (game.mode === 1) return id === 0 ? l[0] || null : null;
+  if (game.mode === 1 || game.online) return id === 0 ? l[0] || null : null;
   if (l.length >= 2) return l[id];
   return id === 1 ? l[0] || null : null;
 }
 
-// The attract-mode survivors turn toward the nearest zombie and fire.
-function aiInput(p, dt) {
-  const input = { dx: 0, dy: 0, fire: false, prev: false, next: false, select: -1 };
-  p.ai = p.ai || { swap: rand(2, 4) };
-  if ((p.ai.swap -= dt) <= 0) { p.ai.swap = rand(3, 6); input.select = pick([0, 1, 2, 6, 8].filter(i => available(p, i))); }
-  let target = null, best = Infinity;
-  for (const z of zombies) {
-    if (z.dead || z.x < 0 || z.y < 0 || z.x > FLOOR_W || z.y > FLOOR_H) continue;
-    const d = dist(p, z);
-    if (d < best) { best = d; target = z; }
-  }
-  const home = room.starts[p.id] || room.starts[0];
-  const goHome = dist(p, home) > (target ? 150 : 24);
-  const want = target ? snap(Math.atan2(target.y - p.y, target.x - p.x)) : snap(Math.atan2(home.y - p.y, home.x - p.x));
-  if (!target || Math.abs(turn(p.angle, want)) > 0.1 || (goHome && best > 140)) {
-    const a = target && !goHome ? want : snap(Math.atan2(home.y - p.y, home.x - p.x));
-    if (target || goHome) { input.dx = Math.round(Math.cos(a)); input.dy = Math.round(Math.sin(a)); }
-  } else input.fire = true;
-  return input;
-}
-
 // ─── Game flow ──────────────────────────────────────────────────────────────
+// The backend loads this function on its own: keep it a plain top-level
+// function that only uses the shared simulation (01-03).
 function resetRun(mode, roomIndex) {
   game.mode = mode;
   game.roomIndex = roomIndex;
-  loadRoom(roomIndex);
-  clearDecals();
-  players = [];
-  for (let i = 0; i < mode; i++) players.push(makePlayer(i, room.starts[i].x, room.starts[i].y));
-  zombies = []; corpses = []; blocks = []; mines = []; pickups = []; shots = [];
-  particles = []; tracers = []; blasts = []; texts = [];
-  barrels = room.barrelSpots.map(({ x, y }) => ({ x, y, hp: 30, lit: false, fuse: 0, flash: 0, drop: 0 }));
-  blockGrid = new Array(COLS * ROWS).fill(null);
-  score = 0; kills = 0; level = 0; intermission = 0; pickupTimer = 8; runTime = 0; shake = 0; flashLight = 0;
-  combo = { level: 1, bar: 0, best: 1, pulse: 0 };
-  upgrades = {};
-  banner = null; toast = null;
-  navDirty = true;
-  refreshNav();
-  nextLevel();
+  startRun();
 }
 
-function startDemo() {
-  game.demo = true;
-  resetRun(2, menu.room);
-  combo.best = 4;
-  for (const p of players) { p.ammo = p.ammo.map(() => Infinity); p.invuln = 0; }
+let paused = false, overShown = false;
+// Offline games wait until the room's original layers are ready (Screen_LoadingWorld).
+const roomReady = () => art.ready && room && roomArt(room.index).ready;
+const MODE_NAMES = { 1: 'solo', 2: 'coop', 3: 'deathmatch' };
+
+function screen(id) {
+  for (const s of document.querySelectorAll('.screen')) s.hidden = s.id !== id;
+  const first = id && $(id) && $(id).querySelector('.mainnav button, .thumb, button, input');
+  if (first && matchMedia('(pointer: fine)').matches) first.focus({ preventScroll: true });
 }
 
-function startGame() {
+function hideScreens() { for (const s of document.querySelectorAll('.screen')) s.hidden = true; }
+
+// What the Options window edits for offline games (CSaveData); online games
+// always use the defaults. The saved "Number of games" default is first to 10,
+// and each mode remembers its own room (single play starts on room 9).
+const saved = (key, fallback) => { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } };
+const store = (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch {} };
+const local = (() => {
+  const o = saved('deadrooms:options', {});
+  const options = { ...DEFAULT_OPTIONS };
+  for (const k of Object.keys(DEFAULT_OPTIONS)) if (typeof o[k] === typeof DEFAULT_OPTIONS[k]) options[k] = o[k];
+  if (!DIFFICULTIES[options.difficulty]) options.difficulty = 0;
+  if (!SPEEDS.includes(options.speed)) options.speed = 1;
+  return { options, frags: FRAG_LIMITS.includes(o.frags) ? o.frags : FRAG_LIMITS[1] };
+})();
+menu.rooms = (() => { const r = saved('deadrooms:rooms', {}); return { 1: r[1] ?? 8, 2: r[2] ?? 0, 3: r[3] ?? 0 }; })();
+const saveOptions = () => store('deadrooms:options', { ...local.options, frags: local.frags });
+
+function startLocal() {
   sfx.init();
+  sfx.ui('World.End'); // CScreen_SelectWorld: the level icon plays Click (World.End.wav)
   if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
-  for (const id of ['menu', 'pause', 'over']) $(id).hidden = true;
+  closeWindows();
+  game.options = { ...local.options };
+  game.fragLimit = local.frags;
+  game.online = false;
   game.demo = false;
   game.state = 'playing';
+  paused = false; overShown = false;
   keys.clear();
   resetRun(menu.mode, menu.room);
+  beginView();
+  hideScreens();
   $('touch').hidden = !touch.used;
 }
 
-function setPaused(on) {
-  if (on && game.state === 'playing') {
-    game.state = 'paused';
-    keys.clear();
-    $('pause').hidden = false;
-    $('touch').hidden = true;
-  } else if (!on && game.state === 'paused') {
-    game.state = 'playing';
-    $('pause').hidden = true;
-    $('touch').hidden = !touch.used;
-    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+// Shared by local and online games once the first state is in place.
+function beginView() {
+  primeEffects();
+  particles = [];
+  if (art.ready) {
+    roomArt(room.index);
+    warmStyles([...new Set(players.map(p => styleOf(p.look)))].concat(game.mode === 3 ? [] : ['zombie', 'devil']));
   }
+  cam.tx = null;
+  updateCamera(0, true);
+}
+
+function togglePause() {
+  if (game.state !== 'playing' || overShown) return;
+  if (game.online) { net.note('Online games keep running: the server does not pause.'); return; }
+  paused = !paused;
+  if (paused) { keys.clear(); sfx.stopAmbience(); fillPause(); screen('pause'); $('touch').hidden = true; }
+  else { hideScreens(); $('touch').hidden = !touch.used; }
 }
 
 function toMenu() {
-  for (const id of ['pause', 'over', 'touch']) $(id).hidden = true;
-  $('menu').hidden = false;
+  net.leave();
+  sfx.stopAmbience();
+  game.online = false;
   game.state = 'menu';
-  refreshBests();
-  startDemo();
-}
-
-function endGame() {
-  game.state = 'over';
-  game.overAt = performance.now();
-  const previous = getBest(game.roomIndex, game.mode), record = score > previous;
-  if (record) setBest(game.roomIndex, game.mode, score);
-  $('overtitle').textContent = record && score > 0 ? 'New best!' : 'Overrun';
-  const time = `${Math.floor(runTime / 60)}:${pad(runTime % 60, 2)}`;
-  $('stats').innerHTML = [['Score', score.toLocaleString()], ['Level', level], ['Kills', kills], ['Best multiplier', `x${combo.best}`], ['Room', ROOMS[game.roomIndex].name], ['Time', time]]
-    .map(([k, v]) => `<div><span>${k}</span><b>${v}</b></div>`).join('');
-  $('over').hidden = false;
+  game.demo = true;
+  paused = false; overShown = false;
+  players = []; zombies = []; corpses = []; shots = []; tracers = []; blasts = []; texts = []; mines = []; pickups = []; particles = [];
+  barrels = []; blocks = [];
+  closeWindows();
+  screen('menu');
   $('touch').hidden = true;
 }
 
-const bestKey = (r, m) => `deadrooms:best:${r}:${m}`;
+// CScreen_Debrief (score, an end line) and CScreen_Debrief_Winner.
+const END_TEXT = ['YOU WERE EATEN!', 'BLED TO DEATH', 'DRAINED OF BLOOD', 'YOUR HEAD WAS RIPPED OFF!', 'DEATH!', 'GAME OVER!', 'WIMPISH!', 'LOSER!'];
+function showOver(rank) {
+  overShown = true;
+  sfx.ui('World.End'); // CScreen_Debrief
+  game.overAt = performance.now();
+  const dm = game.mode === 3, time = `${Math.floor(runTime / 60)}:${pad(runTime % 60, 2)}`;
+  $('over-status').textContent = pick(END_TEXT);
+  $('over-title').classList.toggle('winner', dm);
+  $('over-title').textContent = dm ? (game.winner === null ? 'No winner' : `Player ${game.winner + 1} wins`) : pad(score, 12);
+  const room = `${game.roomIndex + 1}. ${ROOMS[game.roomIndex].name}`;
+  const rows = dm
+    ? [['Player 1 frags', players[1] ? players[1].deaths : 0], ['Player 2 frags', players[0] ? players[0].deaths : 0], ['First to', game.fragLimit], ['Room', room], ['Time', time]]
+    : [['Level', level], ['Kills', kills], ['Best multiplier', `x${combo.best}`], ['Room', room], ['Time', time]];
+  $('stats').innerHTML = rows.map(([k, v]) => `<div><dt>${k}</dt><dd>${escapeHtml(String(v))}</dd></div>`).join('');
+  $('over-rank').textContent = rank;
+  $('again').hidden = game.online;
+  $('again').textContent = dm ? 'Replay' : 'Retry';
+  $('over-board').hidden = dm;
+  screen('over');
+  $('touch').hidden = true;
+}
+
+function localOver() {
+  if (game.mode === 3) { showOver('Offline death match: not ranked.'); return; }
+  const best = getBest(game.roomIndex, game.mode), fair = isDefaultOptions(game.options);
+  if (fair && score > best) setBest(game.roomIndex, game.mode, score);
+  const note = !fair ? ' Options were changed, so no local best either.' : score > best ? ' A new best on this device.' : best ? ` Best on this device: ${best.toLocaleString()}.` : '';
+  showOver(`Offline game: not ranked.${note}`);
+}
+
+const bestKey = (r, m) => `deadrooms:best:${ROOMS[r].id}:${m}`;
 function getBest(r, m) { try { return +localStorage.getItem(bestKey(r, m)) || 0; } catch { return 0; } }
 function setBest(r, m, v) { try { localStorage.setItem(bestKey(r, m), String(v)); } catch {} }
+const escapeHtml = s => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
-// ─── Menu ───────────────────────────────────────────────────────────────────
-function buildMenu() {
-  $('rooms').innerHTML = ROOMS.map((r, i) => `<button class="room" data-room="${i}"><canvas width="240" height="153"></canvas><b>${r.name}</b><small>${r.note}</small><em id="best-${i}"></em></button>`).join('');
-  document.querySelectorAll('.room').forEach(btn => {
-    drawPreview(btn.querySelector('canvas'), ROOMS[+btn.dataset.room]);
-    btn.onclick = e => { chooseRoom(+btn.dataset.room); if (e.detail) btn.blur(); };
+// ─── Menus ──────────────────────────────────────────────────────────────────
+// SubScreen_Single / _Coop / _DeathMatch headline and line beneath, verbatim.
+const OBJECTIVES = {
+  1: ['Kill zombies', 'REWARDS: Earn upto 10 new weapons and 90+ upgrades via multiple Zombies kills!'],
+  2: ['Kill zombies', 'REWARDS: Earn upto 10 new weapons and 90+ upgrades via multiple Zombies kills!'],
+  3: ['Kill each other', 'Access to all weapons at the start and pickup boxes to activate the weapon!'],
+};
+
+function buildMenus() {
+  $('net-room').innerHTML = ROOMS.map((r, i) => `<option value="${i}">${i + 1}. ${escapeHtml(r.name)}</option>`).join('');
+  document.querySelectorAll('[data-help]').forEach(b => { b.onclick = () => showHelp(b.dataset.help); });
+  document.querySelectorAll('[data-go]').forEach(btn => { btn.onclick = () => go(btn.dataset.go); });
+  $('room-prev').onclick = () => chooseRoom(menu.room - 1);
+  $('room-next').onclick = () => chooseRoom(menu.room + 1);
+  $('view-highscores').onclick = () => { board.open(menu.room, menu.mode === 2 ? 'coop' : 'solo'); screen('board'); };
+  $('open-options').onclick = () => openWindow('win-options');
+  $('open-controls').onclick = () => { buildKeys(); $('keys-status').textContent = ''; openWindow('win-controls'); };
+  document.querySelectorAll('[data-close]').forEach(b => { b.onclick = closeWindows; });
+  document.querySelectorAll('#win-options .choices button').forEach(b => {
+    b.onclick = () => {
+      const field = b.closest('.opt').dataset.field, v = Number(b.dataset.value);
+      if (field === 'frags') local.frags = v;
+      else if (field === 'difficulty' || field === 'speed') local.options[field] = v;
+      else local.options[field] = v === 1;
+      saveOptions(); syncOptions(); refreshBest();
+    };
   });
-  document.querySelectorAll('#modes button').forEach(btn => {
-    btn.onclick = e => { chooseMode(+btn.dataset.mode); if (e.detail) btn.blur(); };
-  });
-  chooseMode(menu.mode);
-  chooseRoom(menu.room, true);
+  $('options-reset').onclick = () => { local.options = { ...DEFAULT_OPTIONS }; local.frags = FRAG_LIMITS[1]; saveOptions(); syncOptions(); refreshBest(); };
 }
 
-function chooseMode(m) {
-  menu.mode = m;
-  document.querySelectorAll('#modes button').forEach(b => b.classList.toggle('on', +b.dataset.mode === m));
-  const k = s => `<kbd>${s}</kbd>`;
-  const html = m === 1
-    ? `<span>${k('W')}${k('A')}${k('S')}${k('D')} or ${k('↑')}${k('←')}${k('↓')}${k('→')} move</span><span>${k('Space')} shoot</span><span>${k('Q')} ${k('E')} or ${k('1')}–${k('9')} weapons</span><span>${k('Esc')} pause</span>`
-    : `<span><b>P1</b> ${k('W')}${k('A')}${k('S')}${k('D')} move · ${k('Space')} shoot · ${k('Q')} ${k('E')} weapons</span><span><b>P2</b> ${k('↑')}${k('←')}${k('↓')}${k('→')} move · ${k('Enter')} shoot · ${k(',')} ${k('.')} weapons</span>`;
-  $('keys').innerHTML = html + '<span class="pads">Gamepads work too</span>';
-  $('pausekeys').innerHTML = html;
-  refreshBests();
+function go(where) {
+  sfx.init();
+  sfx.ui(where === 'menu' ? 'CLICK' : 'World.End'); // CScreen_Main state buttons play Click (World.End.wav)
+  const modes = { single: 1, coop: 2, deathmatch: 3 };
+  if (modes[where]) {
+    menu.mode = modes[where];
+    menu.room = menu.rooms[menu.mode];
+    const [headline, line] = OBJECTIVES[menu.mode];
+    $('objective-text').textContent = headline;
+    $('objective-sub').textContent = line;
+    buildChars();
+    showRoom();
+    refreshBest();
+    syncOptions();
+    screen('setup');
+    fitHeadline();
+  } else if (where === 'online') { net.openScreen(); screen('online'); }
+  else if (where === 'board') { board.open(menu.room, 'solo'); screen('board'); }
+  else if (where === 'help') screen('help');
+  else toMenu();
 }
 
-function chooseRoom(i, quiet) {
+// The instructions' four pages (Movement and Controls, How to Play,
+// Characters, Tips and Tricks).
+function showHelp(page) {
+  sfx.ui('CLICK');
+  document.querySelectorAll('[data-help]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.help === page)));
+  document.querySelectorAll('.help-page').forEach(p => { p.hidden = p.dataset.page !== page; });
+}
+
+// Pictures for the Characters page: the portrait cards and, for the zombie
+// and the devil, their own standing frames.
+function paintHelp() {
+  document.querySelectorAll('.help-characters .card-art').forEach(el => paintCard({ querySelector: () => el }, +el.dataset.card));
+  document.querySelectorAll('.help-characters canvas').forEach(cv => {
+    const style = cv.dataset.creature, keep = pixel;
+    pixel = 3;
+    const s = xsiFrame(style, style === 'devil' ? 'Player/Stand' : 'Zombie/Zombie_Stand', Math.PI / 2, 0);
+    pixel = keep;
+    const g = cv.getContext('2d'), k = 2.6;
+    g.clearRect(0, 0, cv.width, cv.height);
+    if (s) g.drawImage(s.img, cv.width / 2 + s.x * k, cv.height * 0.8 + s.y * k, s.w * k, s.h * k);
+  });
+}
+
+// The headline stays on one line, shrinking for "Kill each other".
+function fitHeadline() {
+  const h = $('objective');
+  h.style.fontSize = '';
+  const range = document.createRange();
+  range.selectNodeContents(h);
+  const room = h.getBoundingClientRect().width * 0.97;
+  for (let size = 98; size > 50 && range.getBoundingClientRect().width > room; size -= 4) h.style.fontSize = `${size}px`;
+}
+
+function chooseRoom(i) {
+  sfx.ui('CLICK');
   menu.room = (i + ROOMS.length) % ROOMS.length;
-  document.querySelectorAll('.room').forEach(b => b.classList.toggle('on', +b.dataset.room === menu.room));
-  if (!quiet && game.state === 'menu') startDemo();
+  menu.rooms[menu.mode] = menu.room;
+  store('deadrooms:rooms', menu.rooms);
+  showRoom();
+  refreshBest();
 }
 
-function refreshBests() {
-  ROOMS.forEach((r, i) => { const el = $(`best-${i}`); if (el) el.textContent = `Best ${getBest(i, menu.mode).toLocaleString()}`; });
+function showRoom() {
+  $('room-count').textContent = `${menu.room + 1}/${ROOMS.length}`;
+  $('room-name').textContent = ROOMS[menu.room].name;
+  $('view-highscores').hidden = menu.mode === 3; // as the original, none for death match
+  showPreview();
 }
 
-function drawPreview(cv, def) {
-  const c = cv.getContext('2d'), s = cv.width / W;
-  c.setTransform(s, 0, 0, s, 0, 0);
-  c.fillStyle = '#e8d8bf';
-  c.fillRect(0, 0, W, H);
-  c.translate(0, WALL_H);
-  const solid = (r, col) => r >= 0 && r < ROWS && '#P'.includes(def.map[r][col]);
-  for (let r = 0; r < ROWS; r++) {
-    for (let col = 0; col < COLS; col++) {
-      const t = def.map[r][col], x = col * CELL, y = r * CELL;
-      if (t === 'D') { c.fillStyle = '#c9b89c'; c.fillRect(x, y, CELL, CELL); }
-      if (t === 'b') {
-        c.fillStyle = '#86888a'; c.fillRect(x + 6, y - 14, 28, 34);
-        c.fillStyle = '#c2410c'; c.fillRect(x + 6, y + 2, 28, 8);
-      }
-      if (t === '1' || t === '2') { c.fillStyle = t === '1' ? LOOKS.p1.suit : LOOKS.p2.suit; c.fillRect(x + 8, y - 30, 24, 46); }
-      if (solid(r, col)) {
-        if (!solid(r + 1, col)) { c.fillStyle = '#8c8c8c'; c.fillRect(x, y + CELL - WALL_H, CELL, WALL_H); }
-        c.fillStyle = t === 'P' ? '#d2d2cf' : '#f6f6f3';
-        c.fillRect(x, y - WALL_H, CELL, CELL);
-      }
-    }
+// LevelIcons_Single: the original 350 × 182 picture of each room.
+function showPreview() {
+  const img = $('room-thumb'), url = art.previews[menu.room];
+  if (url && img.getAttribute('src') !== url) img.src = url;
+  img.alt = `${ROOMS[menu.room].name}, room ${menu.room + 1}`;
+}
+
+function refreshBest() {
+  const best = menu.mode === 3 ? 0 : getBest(menu.room, menu.mode);
+  $('local-best').textContent = menu.mode === 3 ? `First to ${local.frags} frags. Offline games are not ranked.`
+    : !isDefaultOptions(local.options) ? 'Options changed: no local best for this game.'
+      : best ? `Best on this device: ${best.toLocaleString()}` : 'Offline games are not ranked.';
+}
+
+// Character cards with arrows (mcPlayer1_Character, mcPlayer2_Character): the
+// original mcCharacter frames, BON, BIND, BERT and BAMBO (Swat, Bond, G.I. Joe
+// and Bambo style sheets, CHARACTERS order).
+function cardHTML(id, step, label = `Player ${id + 1} character`) {
+  const arrows = step ? [`<button class="arrow" type="button" data-player="${id}" data-step="-1" aria-label="Previous character"></button>`, `<button class="arrow next" type="button" data-player="${id}" data-step="1" aria-label="Next character"></button>`] : ['<span></span>', '<span></span>'];
+  return `<div class="charpick" role="group" aria-label="${label}">${arrows[0]}<div class="charcard"><div class="card-art" role="img"></div><b>${id + 1}</b></div>${arrows[1]}</div>`;
+}
+
+function paintCard(card, index) {
+  const art0 = card && card.querySelector('.card-art');
+  if (!art0) return;
+  const s = art.sprites.cards;
+  if (s) art0.style.backgroundImage = `url("${s.img.src}")`;
+  art0.style.backgroundPosition = `${(index / 3) * 100}% 0`;
+  art0.setAttribute('aria-label', CHARACTERS[index].name);
+}
+
+function buildChars() {
+  const ids = menu.mode === 1 ? [0] : [0, 1];
+  $('chars').classList.toggle('two', ids.length === 2);
+  $('chars').innerHTML = ids.map(id => cardHTML(id, true)).join('');
+  document.querySelectorAll('#chars .charpick .arrow').forEach(b => {
+    b.onclick = () => {
+      const id = +b.dataset.player;
+      game.characters[id] = (game.characters[id] + +b.dataset.step + CHARACTERS.length) % CHARACTERS.length;
+      sfx.ui('CLICK');
+      drawChar(id);
+    };
+  });
+  ids.forEach(drawChar);
+}
+
+function drawChar(id) {
+  paintCard(document.querySelectorAll('#chars .charcard')[id], game.characters[id]);
+}
+
+// mcWindow_Options and mcWindow_Controls open over the room screen.
+function openWindow(id) {
+  closeWindows();
+  if (id === 'win-options') syncOptions();
+  $(id).hidden = false;
+  const first = $(id).querySelector('button');
+  if (first && matchMedia('(pointer: fine)').matches) first.focus({ preventScroll: true });
+}
+function closeWindows() { $('win-options').hidden = $('win-controls').hidden = true; rebinding = null; }
+const windowOpen = () => !$('win-options').hidden || !$('win-controls').hidden;
+
+function syncOptions() {
+  document.querySelectorAll('#win-options .opt').forEach(row => {
+    const f = row.dataset.field;
+    const value = f === 'frags' ? local.frags : f === 'difficulty' || f === 'speed' ? local.options[f] : local.options[f] ? 1 : 0;
+    row.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(Number(b.dataset.value) === value)));
+  });
+}
+
+// Key names as the Controls window shows them.
+const keyName = code => ({ ArrowUp: 'Cursor up', ArrowDown: 'Cursor down', ArrowLeft: 'Cursor left', ArrowRight: 'Cursor right', Space: 'Space', Slash: '/', Period: '.', Comma: ',', Semicolon: ';', Quote: "'", BracketLeft: '[', BracketRight: ']', Backslash: '\\', Minus: '-', Equal: '=', Backquote: '`', ShiftLeft: 'Left shift', ShiftRight: 'Right shift', ControlLeft: 'Left ctrl', ControlRight: 'Right ctrl', AltLeft: 'Left alt', AltRight: 'Right alt' })[code] || code.replace(/^Key/, '').replace(/^Numpad/, 'Numpad ');
+
+// In single play player 2's column is covered, as in the original.
+function buildKeys() {
+  $('keys').innerHTML = ['p1', 'p2'].map((p, n) => {
+    const cover = p === 'p2' && menu.mode === 1;
+    return `<div class="${cover ? 'cover' : ''}"><h4>Player ${n + 1} controls</h4>${ACTIONS.map(([a, text]) => `<button type="button" class="keybind" data-player="${p}" data-action="${a}" ${cover ? 'disabled' : ''}><span>${text}:</span><kbd>${escapeHtml(keyName(keymap[p][a]))}</kbd></button>`).join('')}</div>`;
+  }).join('');
+  document.querySelectorAll('.keybind').forEach(b => {
+    b.onclick = () => {
+      rebinding = { player: b.dataset.player, action: b.dataset.action };
+      b.querySelector('kbd').textContent = 'Press a key';
+      $('keys-status').textContent = 'Press the new key, or Escape to keep the old one.';
+    };
+  });
+}
+
+function finishRebind(code) {
+  const { player, action } = rebinding;
+  rebinding = null;
+  if (code === 'Escape') $('keys-status').textContent = '';
+  else if (RESERVED.test(code)) $('keys-status').textContent = `Invalid key: ${keyName(code)} is kept for pausing, sound, menus or weapon numbers.`;
+  else {
+    // A key moved here is taken from wherever it was before.
+    for (const p of ['p1', 'p2']) for (const [a] of ACTIONS) if (keymap[p][a] === code) keymap[p][a] = keymap[player][action];
+    keymap[player][action] = code;
+    try { localStorage.setItem('deadrooms:keys', JSON.stringify(keymap)); } catch {}
+    rebuildBinds();
+    $('keys-status').textContent = `${ACTIONS.find(([a]) => a === action)[1]} for player ${player === 'p1' ? 1 : 2}: ${keyName(code)}.`;
   }
+  buildKeys();
+}
+
+function resetKeys() {
+  keymap = JSON.parse(JSON.stringify(DEFAULT_KEYS));
+  try { localStorage.removeItem('deadrooms:keys'); } catch {}
+  rebuildBinds();
+  buildKeys();
+  $('keys-status').textContent = 'Keys are back to the original defaults.';
+}
+
+// HUD.Paused: every reward boxed with its multiplier, at 25 % until reached;
+// new weapons in green (txtUpgrade.textColor 0x00FF00).
+function fillPause() {
+  $('pause-note').textContent = game.mode === 3
+    ? `${ROOMS[game.roomIndex].name}, death match, first to ${game.fragLimit}.`
+    : `${ROOMS[game.roomIndex].name}, level ${level}, multiplier x${combo.level}, best x${combo.best}.`;
+  $('upgrade-list').innerHTML = UPGRADES.map(u => {
+    const on = !!upgrades[upgradeKey(u)];
+    return `<li class="${on ? 'on' : ''} ${u.name.startsWith('New') ? 'weapon' : ''}"><b>x${u.at}</b><span>${escapeHtml(u.name)}</span></li>`;
+  }).join('');
+  $('sound').textContent = `Sound: ${sfx.enabled ? 'on' : 'off'}`;
 }
 
 // ─── Events ─────────────────────────────────────────────────────────────────
+let rebinding = null;
 addEventListener('keydown', e => {
   sfx.init();
-  const code = e.code, inGame = game.state === 'playing' || game.state === 'dying';
-  const onButton = document.activeElement && document.activeElement.tagName === 'BUTTON';
-  if (inGame && (GAME_KEYS.has(code) || code.startsWith('Digit'))) e.preventDefault();
-  if (!keys.has(code)) pressed.add(code);
-  keys.add(code);
-  if (e.repeat) return;
-  if (code === 'Escape' || (code === 'KeyP' && inGame)) {
-    if (game.state === 'playing') setPaused(true);
-    else if (game.state === 'paused') setPaused(false);
-    else if (game.state === 'over') toMenu();
+  if (rebinding) { e.preventDefault(); finishRebind(e.code); return; }
+  const code = e.code, inGame = game.state === 'playing' && !paused && !overShown;
+  const typing = /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement?.tagName || '');
+  if (inGame && (GAME_KEYS.has(code) || DIGIT_WEAPON(code) >= 0)) e.preventDefault();
+  if (!typing || inGame) { if (!keys.has(code)) pressed.add(code); keys.add(code); }
+  if (e.repeat || typing) return;
+  if (windowOpen()) { if (code === 'Escape') closeWindows(); return; }
+  if (code === 'Escape' || (code === 'KeyP' && game.state === 'playing')) {
+    if (game.state === 'playing' && !overShown) togglePause();
+    else if (overShown || game.state === 'menu') go('menu');
     return;
   }
-  if (code === 'KeyM') toggleSound();
+  if (code === 'KeyM') { sfx.toggle(); $('sound').textContent = `Sound: ${sfx.enabled ? 'on' : 'off'}`; }
+  const onButton = document.activeElement && document.activeElement.tagName === 'BUTTON';
   if (onButton && (code === 'Enter' || code === 'Space')) return;
-  if (game.state === 'menu') {
-    if (code === 'Enter' || code === 'Space') { e.preventDefault(); startGame(); }
-    if (code === 'ArrowLeft' || code === 'ArrowRight') { e.preventDefault(); chooseRoom(menu.room + (code === 'ArrowLeft' ? -1 : 1)); }
-    if (code === 'Digit1' || code === 'Digit2') chooseMode(+code.slice(-1));
-  } else if (game.state === 'over' && (code === 'Enter' || code === 'Space')) {
-    e.preventDefault();
-    if (performance.now() - game.overAt > 800) startGame();
-  }
+  if (!$('setup').hidden && code === 'Enter') { e.preventDefault(); startLocal(); }
+  if (!$('setup').hidden && (code === 'ArrowLeft' || code === 'ArrowRight')) chooseRoom(menu.room + (code === 'ArrowLeft' ? -1 : 1));
+  if (overShown && !game.online && code === 'Enter' && performance.now() - game.overAt > 800) startLocal();
 });
 addEventListener('keyup', e => keys.delete(e.code));
-addEventListener('blur', () => { keys.clear(); setPaused(true); });
-document.addEventListener('visibilitychange', () => { if (document.hidden) setPaused(true); });
+addEventListener('blur', () => { keys.clear(); if (!game.online && game.state === 'playing' && !paused && !overShown) togglePause(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden && !game.online && game.state === 'playing' && !paused && !overShown) togglePause(); });
 addEventListener('resize', resize);
 addEventListener('pointerdown', () => sfx.init());
 
-function toggleSound() {
-  const on = sfx.toggle();
-  $('sound').textContent = `Sound: ${on ? 'on' : 'off'}`;
-}
-
-$('play').onclick = startGame;
-$('resume').onclick = () => setPaused(false);
-$('restart').onclick = startGame;
+$('play').onclick = startLocal;
+$('keys-reset').onclick = resetKeys;
+$('resume').onclick = togglePause;
 $('quit').onclick = toMenu;
-$('again').onclick = startGame;
+$('again').onclick = startLocal;
 $('tomenu').onclick = toMenu;
-$('sound').onclick = toggleSound;
-$('sound').textContent = `Sound: ${sfx.enabled ? 'on' : 'off'}`;
-for (const id of ['fullscreen', 'fullscreen2']) {
-  $(id).onclick = async () => {
-    try { if (document.fullscreenElement) await document.exitFullscreen(); else await document.documentElement.requestFullscreen(); } catch {}
-  };
-}
+$('swap-views').onclick = () => { swapViews(); if (document.activeElement) document.activeElement.blur(); };
+$('over-board').onclick = () => { const r = game.roomIndex, m = game.mode === 2 ? 'coop' : 'solo'; toMenu(); board.open(r, m); screen('board'); };
+$('over-select').onclick = () => {
+  const online = game.online, mode = game.mode;
+  toMenu();
+  if (online) go('online'); else go(MODE_NAMES[mode] === 'solo' ? 'single' : MODE_NAMES[mode]);
+};
+$('sound').onclick = () => { sfx.toggle(); $('sound').textContent = `Sound: ${sfx.enabled ? 'on' : 'off'}`; };
 
 // Touch: a floating stick on the left half, fire and swap on the right.
 (function setupTouch() {
@@ -276,7 +490,7 @@ for (const id of ['fullscreen', 'fullscreen2']) {
   addEventListener('pointerdown', e => {
     if (e.pointerType !== 'touch') return;
     touch.used = true;
-    if (game.state === 'playing') $('touch').hidden = false;
+    if (game.state === 'playing' && !paused && !overShown) $('touch').hidden = false;
   }, true);
   zone.addEventListener('pointerdown', e => {
     id = e.pointerId; ox = e.clientX; oy = e.clientY;
@@ -291,11 +505,11 @@ for (const id of ['fullscreen', 'fullscreen2']) {
     if (e.pointerId !== id) return;
     const k = zone.getBoundingClientRect().width / zone.offsetWidth;
     let dx = (e.clientX - ox) / k, dy = (e.clientY - oy) / k;
-    const d = Math.hypot(dx, dy), max = 56;
+    const d = Math.hypot(dx, dy), max = 70;
     if (d > max) { dx *= max / d; dy *= max / d; }
     knob.style.transform = `translate(${dx}px, ${dy}px)`;
-    if (d < 14) { touch.dx = touch.dy = 0; return; }
-    const a = snap(Math.atan2(dy, dx));
+    if (d < 18) { touch.dx = touch.dy = 0; return; }
+    const a = Math.round(Math.atan2(dy, dx) / OCT) * OCT;
     touch.dx = Math.round(Math.cos(a)); touch.dy = Math.round(Math.sin(a));
   });
   const release = e => {
@@ -306,57 +520,52 @@ for (const id of ['fullscreen', 'fullscreen2']) {
   zone.addEventListener('pointerup', release);
   zone.addEventListener('pointercancel', release);
   const fireBtn = $('t-fire');
-  fireBtn.addEventListener('pointerdown', e => { e.preventDefault(); touch.on = true; touch.fire = true; fireBtn.setPointerCapture(e.pointerId); });
+  fireBtn.addEventListener('pointerdown', e => { e.preventDefault(); touch.on = true; touch.fire = true; touch.tap = true; fireBtn.setPointerCapture(e.pointerId); });
   for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) fireBtn.addEventListener(ev, () => { touch.fire = false; });
   $('t-swap').addEventListener('pointerdown', e => { e.preventDefault(); touch.on = true; touch.swap = true; });
-  $('t-pause').addEventListener('click', () => setPaused(true));
+  $('t-pause').addEventListener('click', togglePause);
 })();
 
 // ─── Main loop ──────────────────────────────────────────────────────────────
 let last = performance.now();
 function frame(now) {
-  const real = Math.min(0.05, (now - last) / 1000);
+  const real = Math.min(0.1, (now - last) / 1000);
   last = now;
   pollPads();
-  const running = game.state === 'playing' || game.state === 'dying' || game.state === 'menu';
-  if (running && !game.frozen) {
-    let dt = Math.min(real, 1 / 30);
-    if (game.state === 'dying') {
-      dt *= 0.35;
-      game.dying -= real;
-    }
-    update(dt);
-    if (game.state === 'dying' && game.dying <= 0) endGame();
+  if (game.state === 'menu') { /* white menu pages, nothing to animate */ }
+  else if (game.online) { net.frame(real); updateCamera(real); }
+  else if (game.state === 'playing' && !paused && !game.frozen && roomReady()) { update(real); updateCamera(real); }
+  if (game.state !== 'menu' && !paused) syncEffects();
+  if (game.state !== 'menu') warmStep(game.state === 'playing' && roomReady() ? 3 : 12);
+  if (game.state === 'over' && !overShown) {
+    if (game.online) net.over(); else localOver();
   }
+  const swap = !(game.mode === 3 && game.state === 'playing' && !paused && !overShown);
+  if ($('swap-views').hidden !== swap) $('swap-views').hidden = swap;
   pressed.clear();
   draw();
   requestAnimationFrame(frame);
 }
 
-// Debug and test hooks.
-window.__update = update;
-window.__draw = draw;
+// ─── Test hooks ─────────────────────────────────────────────────────────────
+// For automated checks of the running page. rules() returns the live tables.
 window.deadRooms = {
-  snapshot: () => ({
-    state: game.state, mode: game.mode, room: game.roomIndex, level, score, kills, combo: { ...combo }, toSpawn,
-    zombies: zombies.length, barrels: barrels.length, blocks: blocks.length, mines: mines.length, shots: shots.length, pickups: pickups.length,
-    players: players.map(p => ({ x: p.x, y: p.y, hp: p.hp, weapon: WEAPONS[p.weapon].id, ammo: p.ammo.slice(), down: p.down })),
-  }),
+  source: { swf: 'boxhead2play.swf', sha256: '34ff145d96891ddea20278700c8b1fb6fd6273ca0e71b73d8bdf0df183fdbece' },
+  rules: () => JSON.parse(JSON.stringify({ rooms: ROOMS, weapons: WEAPONS, upgrades: UPGRADES, rules: RULES, difficulties: DIFFICULTIES, levels: buildLevels(true).slice(1) })),
+  snapshot: () => JSON.parse(JSON.stringify({ state: game.state, online: game.online, mode: game.mode, winner: game.winner, fragLimit: game.fragLimit, room: game.roomIndex, level, score, kills, combo, toSpawn, upgrades, players, zombies: zombies.length, corpses: corpses.length, barrels: barrels.length, blocks: blocks.length, mines: mines.length, shots: shots.length, pickups: pickups.length, ticks })),
+  start: (mode = 1, roomIndex = 0, options = {}) => {
+    const { fragLimit, ...rest } = options;
+    menu.mode = mode; menu.room = roomIndex;
+    const keepOptions = local.options, keepFrags = local.frags;
+    local.options = { ...DEFAULT_OPTIONS, ...rest };
+    if (fragLimit) local.frags = fragLimit;
+    startLocal();
+    local.options = keepOptions; local.frags = keepFrags;
+  },
   freeze: on => { game.frozen = on; },
-  step: (seconds, dt = 1 / 60) => { for (let t = 0; t < seconds; t += dt) update(dt); draw(); },
-  get world() { return { players, zombies, barrels, blocks, mines, pickups, shots, corpses, combo, room }; },
+  ticks: n => { for (let i = 0; i < n && game.state === 'playing'; i++) { for (const p of players) takeInput(p, game.autopilot ? autoInput(p) : gatherInput(p)); simTick(); } syncEffects(0); draw(); },
+  input: (i, value) => { scripted[i] = value ? { dx: 0, dy: 0, fire: false, prev: false, next: false, select: -1, ...value } : null; game.autopilot = scripted.some(Boolean); },
+  get world() { return { players, zombies, corpses, barrels, blocks, mines, pickups, shots, combo, room, level, lv }; },
   spawn: (x, y, devil = false) => { const z = makeZombie(x, y, devil); zombies.push(z); return z; },
-  unlockAll: () => { combo.best = 16; for (const p of players) p.ammo = WEAPONS.map(w => (w.start === Infinity ? Infinity : w.start)); },
-  start: (mode = 1, roomIndex = 0) => { menu.mode = mode; menu.room = roomIndex; startGame(); },
-  setWeapon: (i, w) => { players[i].weapon = WEAPONS.findIndex(x => x.id === w); },
-  fire: i => { players[i].cooldown = 0; fire(players[i]); },
-  face: (i, angle) => { players[i].angle = angle; },
-  autopilot: on => { game.autopilot = on; },
+  multiplier: n => setMultiplier(n),
 };
-
-resize();
-buildMenu();
-startDemo();
-// Labels drawn before the web font arrives are redrawn once it does.
-if (document.fonts) document.fonts.addEventListener('loadingdone', () => labels.clear());
-requestAnimationFrame(frame);

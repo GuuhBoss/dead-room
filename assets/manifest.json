@@ -1,0 +1,434 @@
+{
+ "sprites": {
+  "barrel": {
+   "src": "sprites/barrel.png",
+   "frames": 1,
+   "w": 36.0,
+   "h": 45.5,
+   "ox": 21.0,
+   "oy": 34.275
+  },
+  "chargepack": {
+   "src": "sprites/chargepack.png",
+   "frames": 2,
+   "w": 28.0,
+   "h": 25.5,
+   "ox": 14.625,
+   "oy": 13.55
+  },
+  "mine": {
+   "src": "sprites/mine.png",
+   "frames": 2,
+   "w": 25.0,
+   "h": 20.5,
+   "ox": 12.425,
+   "oy": 10.0
+  },
+  "pickup": {
+   "src": "sprites/pickup.png",
+   "frames": 1,
+   "w": 32.0,
+   "h": 29.5,
+   "ox": 17.1,
+   "oy": 20.85
+  },
+  "wall": {
+   "src": "sprites/wall.png",
+   "frames": 10,
+   "w": 44.5,
+   "h": 48.5,
+   "ox": 27.875,
+   "oy": 34.775
+  },
+  "cluster": {
+   "src": "sprites/cluster.png",
+   "frames": 1,
+   "w": 7.5,
+   "h": 4.5,
+   "ox": 3.7,
+   "oy": 3.15
+  },
+  "grenade": {
+   "src": "sprites/grenade.png",
+   "frames": 1,
+   "w": 6.5,
+   "h": 6.5,
+   "ox": 3.25,
+   "oy": 5.45
+  },
+  "rocket": {
+   "src": "sprites/rocket.png",
+   "frames": 1,
+   "w": 51.5,
+   "h": 52.5,
+   "ox": 26.2,
+   "oy": 25.3
+  },
+  "bloodHitBack": {
+   "src": "sprites/bloodHitBack.png",
+   "frames": 1,
+   "w": 75.0,
+   "h": 8.0,
+   "ox": 4.15,
+   "oy": 4.0
+  },
+  "bloodPool": {
+   "src": "sprites/bloodPool.png",
+   "frames": 1,
+   "w": 61.0,
+   "h": 54.5,
+   "ox": 30.5,
+   "oy": 27.25
+  },
+  "bloodSplat": {
+   "src": "sprites/bloodSplat.png",
+   "frames": 1,
+   "w": 68.5,
+   "h": 65.5,
+   "ox": 34.5,
+   "oy": 31.075
+  },
+  "bulletHit": {
+   "src": "sprites/bulletHit.png",
+   "frames": 1,
+   "w": 23.0,
+   "h": 33.5,
+   "ox": 11.5,
+   "oy": 26.8
+  },
+  "explosion": {
+   "src": "sprites/explosion.png",
+   "frames": 18,
+   "w": 217.0,
+   "h": 162.5,
+   "ox": 108.5,
+   "oy": 108.45
+  },
+  "explosionAir": {
+   "src": "sprites/explosionAir.png",
+   "frames": 18,
+   "w": 217.0,
+   "h": 216.5,
+   "ox": 108.5,
+   "oy": 108.325
+  },
+  "fireball": {
+   "src": "sprites/fireball.png",
+   "frames": 1,
+   "w": 38.5,
+   "h": 42.0,
+   "ox": 19.25,
+   "oy": 22.65
+  },
+  "rocketSmoke": {
+   "src": "sprites/rocketSmoke.png",
+   "frames": 6,
+   "w": 128.0,
+   "h": 128.0,
+   "ox": 64.0,
+   "oy": 64.0
+  },
+  "scorch": {
+   "src": "sprites/scorch.png",
+   "frames": 1,
+   "w": 121.5,
+   "h": 121.5,
+   "ox": 60.75,
+   "oy": 60.75
+  },
+  "smokeCloud": {
+   "src": "sprites/smokeCloud.png",
+   "frames": 1,
+   "w": 134.0,
+   "h": 134.0,
+   "ox": 67.0,
+   "oy": 103.25
+  },
+  "wallMark": {
+   "src": "sprites/wallMark.png",
+   "frames": 1,
+   "w": 29.0,
+   "h": 24.0,
+   "ox": 14.4,
+   "oy": 12.325
+  },
+  "muzzlePistol": {
+   "src": "sprites/muzzlePistol.png",
+   "frames": 1,
+   "w": 86.0,
+   "h": 70.0,
+   "ox": 35.05,
+   "oy": 34.875
+  },
+  "muzzleRailgun": {
+   "src": "sprites/muzzleRailgun.png",
+   "frames": 1,
+   "w": 86.0,
+   "h": 70.0,
+   "ox": 35.05,
+   "oy": 34.875
+  },
+  "muzzleShotgun": {
+   "src": "sprites/muzzleShotgun.png",
+   "frames": 1,
+   "w": 86.0,
+   "h": 70.0,
+   "ox": 35.05,
+   "oy": 34.875
+  },
+  "muzzleUzi": {
+   "src": "sprites/muzzleUzi.png",
+   "frames": 1,
+   "w": 86.0,
+   "h": 70.0,
+   "ox": 35.05,
+   "oy": 34.875
+  },
+  "hudTimer": {
+   "src": "sprites/hudTimer.png",
+   "frames": 101,
+   "w": 97.0,
+   "h": 78.0,
+   "ox": 10.075,
+   "oy": 9.95
+  },
+  "hudLife": {
+   "src": "sprites/hudLife.png",
+   "frames": 101,
+   "w": 50.0,
+   "h": 10.0,
+   "ox": 25.0,
+   "oy": 1.0
+  },
+  "hudAmmo": {
+   "src": "sprites/hudAmmo.png",
+   "frames": 2,
+   "w": 97.5,
+   "h": 23.0,
+   "ox": 48.725,
+   "oy": 11.25
+  },
+  "swapUp": {
+   "src": "sprites/swapUp.png",
+   "frames": 1,
+   "w": 506.0,
+   "h": 170.0,
+   "ox": 0,
+   "oy": 0
+  },
+  "swapOver": {
+   "src": "sprites/swapOver.png",
+   "frames": 1,
+   "w": 506.0,
+   "h": 170.0,
+   "ox": 0,
+   "oy": 0
+  },
+  "cards": {
+   "src": "sprites/cards.png",
+   "frames": 4,
+   "w": 170.5,
+   "h": 170.5,
+   "ox": 0,
+   "oy": 0
+  }
+ },
+ "textures": {
+  "src": "textures.png",
+  "size": 128,
+  "cols": 8,
+  "names": [
+   "Zombie_Skin_Color",
+   "Zombie_Body_Back",
+   "Zombie_Body_Front",
+   "Zombie_Body_Side",
+   "Zombie_Body_Top",
+   "Zombie_Hair_Color",
+   "Swat_Body_Back",
+   "Swat_Body_Front",
+   "Swat_Body_Side",
+   "Swat_Body_Top",
+   "GIJOE_Body_Back",
+   "GIJOE_Body_Front",
+   "GIJOE_Body_Side",
+   "GIJOE_Body_Top",
+   "GIJOE_Skin_Color",
+   "Devil_Skin_Color",
+   "Devil_Body_Back",
+   "Devil_Body_Front",
+   "Devil_Body_Side",
+   "Devil_Body_Top",
+   "Bond_Body_Back",
+   "Bond_Body_Front",
+   "Bond_Body_Side",
+   "Bond_Body_Top",
+   "Bond_Skin_Color",
+   "Bambo_Skin_Color",
+   "Bambo_Body_Back",
+   "Bambo_Body_Front",
+   "Bambo_Body_Side",
+   "Bambo_Body_Top",
+   "Bambo_Head_Back",
+   "Bambo_Head_Front",
+   "Bambo_Head_Side",
+   "Body_Back_MC",
+   "Body_Front_MC",
+   "Body_Side_MC",
+   "Body_Top_MC",
+   "Head_Back_MC",
+   "Head_Front_MC",
+   "Head_Side_MC"
+  ]
+ },
+ "sounds": {
+  "Creature.HitFloor": "sounds/Creature.HitFloor.mp3",
+  "Creature.Player.Scream.1": "sounds/Creature.Player.Scream.1.mp3",
+  "Creature.Player.Scream.2": "sounds/Creature.Player.Scream.2.mp3",
+  "Creature.Zombie.Ambience.1": "sounds/Creature.Zombie.Ambience.1.mp3",
+  "Creature.Zombie.Ambience.2": "sounds/Creature.Zombie.Ambience.2.mp3",
+  "Creature.Zombie.Ambience.3": "sounds/Creature.Zombie.Ambience.3.mp3",
+  "Creature.Zombie.Ambience.4": "sounds/Creature.Zombie.Ambience.4.mp3",
+  "Creature.Zombie.Attack": "sounds/Creature.Zombie.Attack.mp3",
+  "Creature.Zombie.Hit": "sounds/Creature.Zombie.Hit.mp3",
+  "Effect.Explosion": "sounds/Effect.Explosion.mp3",
+  "Object.Barrel.Place": "sounds/Object.Barrel.Place.mp3",
+  "Object.Mine.Detonate": "sounds/Object.Mine.Detonate.mp3",
+  "Object.Pickup": "sounds/Object.Pickup.mp3",
+  "Shot.Grenade.Bounce": "sounds/Shot.Grenade.Bounce.mp3",
+  "Shot.HitWall.1": "sounds/Shot.HitWall.1.mp3",
+  "Shot.HitWall.2": "sounds/Shot.HitWall.2.mp3",
+  "Shot.HitWall.3": "sounds/Shot.HitWall.3.mp3",
+  "Shot.Rocket.Fire": "sounds/Shot.Rocket.Fire.mp3",
+  "Weapon.Mine.Place": "sounds/Weapon.Mine.Place.mp3",
+  "Weapon.Pistol.Fire": "sounds/Weapon.Pistol.Fire.mp3",
+  "Weapon.Railgun.Fire": "sounds/Weapon.Railgun.Fire.mp3",
+  "Weapon.Rocket.Fire": "sounds/Weapon.Rocket.Fire.mp3",
+  "Weapon.ShotGun.Fire": "sounds/Weapon.ShotGun.Fire.mp3",
+  "Weapon.UZI.Fire": "sounds/Weapon.UZI.Fire.mp3",
+  "World.End": "sounds/World.End.mp3",
+  "CLICK": "sounds/CLICK.mp3"
+ },
+ "fonts": {
+  "Calibri": "fonts/calibri.woff",
+  "Calibri Bold": "fonts/calibri-bold.woff",
+  "Arial Rounded MT Bold": "fonts/arial-rounded-bold.woff"
+ },
+ "previews": [
+  "previews/01.jpg",
+  "previews/02.png",
+  "previews/03.png",
+  "previews/04.jpg",
+  "previews/05.png",
+  "previews/06.png",
+  "previews/07.jpg",
+  "previews/08.jpg",
+  "previews/09.jpg",
+  "previews/10.png",
+  "previews/11.jpg",
+  "previews/12.jpg",
+  "previews/13.png",
+  "previews/14.png",
+  "previews/15.png",
+  "previews/16.png",
+  "previews/17.png",
+  "previews/18.jpg"
+ ],
+ "rooms": [
+  {
+   "floor": "rooms/01-floor.png",
+   "cover": "rooms/01-cover.png",
+   "mask": "rooms/01-mask.png"
+  },
+  {
+   "floor": "rooms/02-floor.png",
+   "cover": "rooms/02-cover.png",
+   "mask": "rooms/02-mask.png"
+  },
+  {
+   "floor": "rooms/03-floor.png",
+   "cover": "rooms/03-cover.png",
+   "mask": "rooms/03-mask.png"
+  },
+  {
+   "floor": "rooms/04-floor.png",
+   "cover": "rooms/04-cover.png",
+   "mask": "rooms/04-mask.png"
+  },
+  {
+   "floor": "rooms/05-floor.png",
+   "cover": "rooms/05-cover.png",
+   "mask": "rooms/05-mask.png"
+  },
+  {
+   "floor": "rooms/06-floor.png",
+   "cover": "rooms/06-cover.png",
+   "mask": "rooms/06-mask.png"
+  },
+  {
+   "floor": "rooms/07-floor.png",
+   "cover": "rooms/07-cover.png",
+   "mask": "rooms/07-mask.png"
+  },
+  {
+   "floor": "rooms/08-floor.png",
+   "cover": "rooms/08-cover.png",
+   "mask": "rooms/08-mask.png"
+  },
+  {
+   "floor": "rooms/09-floor.png",
+   "cover": "rooms/09-cover.png",
+   "mask": "rooms/09-mask.png"
+  },
+  {
+   "floor": "rooms/10-floor.png",
+   "cover": "rooms/10-cover.png",
+   "mask": "rooms/10-mask.png"
+  },
+  {
+   "floor": "rooms/11-floor.png",
+   "cover": "rooms/11-cover.png",
+   "mask": "rooms/11-mask.png"
+  },
+  {
+   "floor": "rooms/12-floor.png",
+   "cover": "rooms/12-cover.png",
+   "mask": "rooms/12-mask.png"
+  },
+  {
+   "floor": "rooms/13-floor.png",
+   "cover": "rooms/13-cover.png",
+   "mask": "rooms/13-mask.png"
+  },
+  {
+   "floor": "rooms/14-floor.png",
+   "cover": "rooms/14-cover.png",
+   "mask": "rooms/14-mask.png"
+  },
+  {
+   "floor": "rooms/15-floor.png",
+   "cover": "rooms/15-cover.png",
+   "mask": "rooms/15-mask.png"
+  },
+  {
+   "floor": "rooms/16-floor.png",
+   "cover": "rooms/16-cover.png",
+   "mask": "rooms/16-mask.png"
+  },
+  {
+   "floor": "rooms/17-floor.png",
+   "cover": "rooms/17-cover.png",
+   "mask": "rooms/17-mask.png"
+  },
+  {
+   "floor": "rooms/18-floor.png",
+   "cover": "rooms/18-cover.png",
+   "mask": "rooms/18-mask.png"
+  }
+ ],
+ "title": {
+  "logo": "title/logo.png",
+  "background": "title/background.jpg",
+  "loading": "title/loading.jpg"
+ },
+ "xsi": "xsi.json"
+}

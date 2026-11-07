@@ -1,4 +1,4 @@
-// Zero-dependency static server for dist/.
+// Static server and authoritative online survival service.
 // PORT (default 3330) and HOST (default 0.0.0.0) come from the environment.
 // `node server.mjs --dev` builds first and rebuilds when src/ changes.
 import { createServer } from 'node:http';
@@ -7,6 +7,8 @@ import { stat } from 'node:fs/promises';
 import { join, extname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build, watchSrc, dist } from './build.mjs';
+import { Leaderboard } from './backend/leaderboard.mjs';
+import { attachOnline } from './backend/online.mjs';
 
 const TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -15,6 +17,10 @@ const TYPES = {
   '.json': 'application/json; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.mp3': 'audio/mpeg',
+  '.woff': 'font/woff',
   '.ico': 'image/x-icon',
 };
 
@@ -27,18 +33,40 @@ async function resolveFile(path) {
   return info?.isFile() ? { file, size: info.size } : null;
 }
 
-export function createApp() {
-  return createServer(async (req, res) => {
+export function createApp(options = {}) {
+  const leaderboard = new Leaderboard(options.dataDir);
+  const server = createServer(async (req, res) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     if (req.method !== 'GET' && req.method !== 'HEAD') {
       res.writeHead(405, { Allow: 'GET, HEAD' }).end();
       return;
     }
-    let path;
+    let path, url;
     try {
-      path = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
+      url = new URL(req.url, 'http://localhost');
+      path = decodeURIComponent(url.pathname);
     } catch {
       res.writeHead(400).end('Bad request');
+      return;
+    }
+    if (path === '/api/leaderboard') {
+      const filters = {};
+      let valid = true;
+      for (const key of url.searchParams.keys()) {
+        if (!['roomIndex', 'mode'].includes(key) || url.searchParams.getAll(key).length !== 1) valid = false;
+      }
+      if (url.searchParams.has('mode')) {
+        filters.mode = url.searchParams.get('mode');
+        if (!['solo', 'coop'].includes(filters.mode)) valid = false;
+      }
+      if (url.searchParams.has('roomIndex')) {
+        const value = url.searchParams.get('roomIndex');
+        filters.roomIndex = Number(value);
+        if (!/^(0|[1-9][0-9]{0,2})$/.test(value) || filters.roomIndex > 255) valid = false;
+      }
+      const body = JSON.stringify(valid ? { entries: leaderboard.list(filters) } : { error: 'Invalid leaderboard filters' });
+      res.writeHead(valid ? 200 : 400, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': Buffer.byteLength(body), 'Cache-Control': 'no-store' });
+      res.end(req.method === 'HEAD' ? undefined : body);
       return;
     }
     const found = await resolveFile(path);
@@ -53,8 +81,13 @@ export function createApp() {
       'Cache-Control': 'no-cache',
     });
     if (req.method === 'HEAD') res.end();
-    else createReadStream(found.file).pipe(res);
+    else createReadStream(found.file).on('error', () => res.destroy()).pipe(res);
   });
+  const online = attachOnline(server, leaderboard, options.online);
+  const close = server.close.bind(server);
+  server.close = callback => { online.close(); return close(callback); };
+  server.once('close', () => online.close());
+  return server;
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
