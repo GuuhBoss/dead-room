@@ -336,3 +336,96 @@ test('lobby character selection is cosmetic, slot-bound and locked once play sta
   guest.send({type:'character',character:0});
   assert.match((await guest.next('error')).message,/lobby/);
 });
+
+test('rematch: every member must accept; the same room restarts with a new run id and ranks again', async t => {
+  const service = await app(t, { sourceDir: fixtureSources(t, defeatSetup) });
+  const host = await client(t, service.base), guest = await client(t, service.base);
+  const welcome = await room(host, 'coop');
+  guest.send({ type: 'join', code: welcome.code, name: 'Bob' }); await guest.next('welcome');
+  guest.send({ type: 'character', character: 2 }); await host.next('lobby', m => m.players[1]?.character === 2);
+  host.send({ type: 'rematch' });
+  assert.match((await host.next('error')).message, /finished run/);
+  host.send({ type: 'start' });
+  const first = await host.next('result');
+  assert.equal(first.runId, welcome.runId);
+  await guest.next('result');
+  host.send({ type: 'rematch', now: true });
+  assert.match((await host.next('error')).message, /Invalid rematch/);
+  host.send({ type: 'rematch' });
+  assert.deepEqual(await guest.next('rematch'), { type: 'rematch', ready: [0] });
+  assert.deepEqual(await host.next('rematch'), { type: 'rematch', ready: [0] });
+  guest.send({ type: 'rematch' });
+  const restartHost = await host.next('restart'), restartGuest = await guest.next('restart');
+  assert.equal(restartHost.runId, restartGuest.runId);
+  assert.notEqual(restartHost.runId, welcome.runId);
+  const fresh = await guest.next('state', s => s.tick === 0);
+  assert.equal(fresh.snapshot.game.state, 'playing');
+  assert.deepEqual(fresh.snapshot.game.characters, [3, 2]);
+  const second = await host.next('result', r => r.runId === restartHost.runId);
+  assert.equal(second.recorded, true);
+  const entries = await service.entries('?mode=coop&roomIndex=0');
+  assert.deepEqual(entries.map(e => e.id).sort(), [welcome.runId, restartHost.runId].sort());
+});
+
+test('rematch: a solo player restarts at once; leaving a finished room cancels for the partner', async t => {
+  const service = await app(t, { sourceDir: fixtureSources(t, defeatSetup) });
+  const solo = await client(t, service.base);
+  const first = await room(solo);
+  solo.send({ type: 'start' }); await solo.next('result');
+  solo.send({ type: 'rematch' });
+  const restart = await solo.next('restart');
+  assert.notEqual(restart.runId, first.runId);
+  await solo.next('result', r => r.runId === restart.runId);
+  // Another address budget: the rematch above spent this one's room creations.
+  const other = await app(t, { sourceDir: fixtureSources(t, defeatSetup) });
+  const host = await client(t, other.base), guest = await client(t, other.base);
+  const welcome = await room(host, 'coop', 0, 'Carol');
+  guest.send({ type: 'join', code: welcome.code, name: 'Dan' }); await guest.next('welcome');
+  host.send({ type: 'start' }); await host.next('result'); await guest.next('result');
+  host.send({ type: 'rematch' }); await guest.next('rematch');
+  guest.send({ type: 'leave' });
+  assert.match((await host.next('ended')).reason, /left/);
+  host.send({ type: 'rematch' });
+  assert.match((await host.next('error')).message, /finished run/);
+});
+
+test('deathmatch rematch clears the winner, preserves the mode and never survival-ranks either run', async t => {
+  const setup = `
+spawnZ = []; spawnD = [];
+const p = players[1]; p.deaths = game.fragLimit - 1; p.inv = 0;
+affect(p, {type:'bullet',damage:p.max+1,x:p.x-1,y:p.y,owner:0});
+processAffects(p); p.count=0; hitState(p); p.state='dead'; p.count=0;
+`;
+  const service = await app(t, { sourceDir: fixtureSources(t, setup) });
+  const host = await client(t, service.base), guest = await client(t, service.base);
+  const first = await room(host, 'deathmatch');
+  guest.send({type:'join',code:first.code,name:'Bob'}); await guest.next('welcome');
+  host.send({type:'start'});
+  assert.equal((await host.next('result')).recorded, false);
+  await guest.next('result');
+  host.send({type:'rematch'}); await host.next('rematch');
+  guest.send({type:'rematch'});
+  const restart = await host.next('restart');
+  assert.notEqual(restart.runId, first.runId);
+  assert.equal((await guest.next('restart')).runId, restart.runId);
+  const fresh = (await host.next('state', s=>s.tick===0 && s.snapshot.game.state==='playing')).snapshot;
+  assert.equal(fresh.game.mode, 3);
+  assert.equal(fresh.game.winner, null);
+  assert.equal(fresh.game.fragLimit, 10);
+  assert.equal((await host.next('result',r=>r.runId===restart.runId)).recorded, false);
+  assert.deepEqual(await service.entries(), []);
+});
+
+test('rematch cannot bypass creation budgets or accept votes from outside the room', async t => {
+  const service = await app(t, { sourceDir: fixtureSources(t, defeatSetup), limits: { createBurst: 1, createsPerSecond: 0 } });
+  const solo = await client(t, service.base), outsider = await client(t, service.base);
+  const first = await room(solo);
+  solo.send({type:'start'}); await solo.next('result');
+  outsider.send({type:'rematch'});
+  assert.match((await outsider.next('error')).message, /finished run/);
+  solo.send({type:'rematch'});
+  assert.match((await solo.next('error')).message, /rate limit/);
+  solo.send({type:'ping',at:42}); await solo.next('pong');
+  assert.equal(solo.queue.some(m=>m.type==='restart'), false);
+  assert.deepEqual((await service.entries()).map(e=>e.id), [first.runId]);
+});

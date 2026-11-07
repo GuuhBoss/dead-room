@@ -7,7 +7,7 @@ import { exact, neutralInput, validInput, playerName, bucket, consume } from './
 export const DEFAULT_LIMITS = Object.freeze({
   connections: 128, connectionsPerIp: 8, rooms: 32, roomsPerIp: 3,
   payload: 2048, buffered: 256 * 1024, staleInputMs: 250, idleMs: 30000,
-  lobbyMs: 120000, runMs: 2 * 60 * 60 * 1000, finishedMs: 30000,
+  lobbyMs: 120000, runMs: 2 * 60 * 60 * 1000, finishedMs: 60000,
   messagesPerSecond: 60, messageBurst: 90, controlsPerSecond: 2, controlBurst: 8,
   // These also bound repeated VM compilation and room-code guessing.
   createsPerSecond: 0.1, createBurst: 2, upgradeBurst: 20, upgradesPerSecond: 2,
@@ -65,7 +65,7 @@ export function attachOnline(server, leaderboard, options = {}) {
   }
   function welcome(client, room, playerId, name) {
     client.room = room; client.playerId = playerId; client.name = name;
-    client.character = playerId === 0 ? 3 : 0;
+    client.character = playerId === 0 ? 3 : 0; client.rematch = false;
     client.seq = -1; client.input = neutralInput(); client.inputAt = 0;
     room.members.push(client);
     send(client, { type: 'welcome', code: room.code, playerId, host: playerId === 0, runId: room.id, mode: room.mode, roomIndex: room.roomIndex });
@@ -117,6 +117,40 @@ export function attachOnline(server, leaderboard, options = {}) {
         if (room.members.length !== (room.mode === 'solo' ? 1 : 2) || room.members.some(member => member.ws.readyState !== WebSocket.OPEN)) return error(client, 'Waiting for both players');
         room.status = 'playing'; room.startedAt = now;
         for (const member of room.members) { member.input = neutralInput(); member.seq = -1; member.inputAt = 0; }
+        state(room);
+        break;
+      }
+      case 'rematch': {
+        // After a finished run every member may ask to play again; when all
+        // have, the same room starts a fresh run (new id, same mode, room and
+        // characters). Votes last until the finished room expires or someone
+        // leaves, which removes the room as before.
+        if (!exact(message, ['type'])) return error(client, 'Invalid rematch message');
+        const room = client.room;
+        if (!room || room.status !== 'complete') return error(client, 'Rematch requires a finished run');
+        client.rematch = true;
+        const ready = room.members.filter(member => member.rematch).map(member => member.playerId);
+        if (ready.length < room.members.length || room.members.some(member => member.ws.readyState !== WebSocket.OPEN)) {
+          for (const member of room.members) send(member, { type: 'rematch', ready });
+          break;
+        }
+        // A rematch compiles a new simulation, so it spends the creator's budget.
+        const owner = ips.get(room.ip);
+        if (owner && !consume(owner.creates, now)) {
+          for (const member of room.members) error(member, 'Rematch rate limit exceeded; try again shortly');
+          break;
+        }
+        let simulation;
+        try {
+          simulation = createSimulation({ mode: room.mode, roomIndex: room.roomIndex, sourceDir: options.sourceDir });
+          for (const member of room.members) simulation.setCharacter(member.playerId, member.character);
+        } catch { remove(room, 'Simulation is unavailable'); break; }
+        room.simulation = simulation; room.id = randomUUID();
+        room.status = 'playing'; room.startedAt = now; room.finishedAt = 0;
+        for (const member of room.members) {
+          member.rematch = false; member.input = neutralInput(); member.seq = -1; member.inputAt = 0;
+          send(member, { type: 'restart', runId: room.id });
+        }
         state(room);
         break;
       }

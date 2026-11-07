@@ -158,3 +158,27 @@ released controls; disconnect remained unranked. No page errors occurred.
 All61 automated tests, bundle syntax and whitespace checks pass. These checks
 used Chromium phone emulation; real iPhone/Safari and physical notches/soft
 keyboards have not been independently tested.
+
+## Online camera preferences and rematches
+
+The user requested per-player Shared/Own views and unanimous play-again votes.
+Opus implemented the UI and rematch handler; the parent independently reviewed
+the server state transitions, membership checks, input reset, creation-budget
+enforcement and per-run ranking. Four network tests cover cooperative voting,
+solo restart, departure cancellation, fresh UUIDs and separate recorded runs,
+deathmatch winner reset/ranking exclusion, outsider votes and exhausted budgets.
+All65 tests pass.
+
+Parent two-client browser checks confirmed that the host's Own view does not
+change the guest's Shared view, that own-view deathmatch uses one camera while
+shared-view deathmatch stays split, that V switches and persists the preference,
+and that one rematch vote cannot restart both players. After both accepted, the
+same room restarted with a new shared run ID, and both survival games appeared
+under distinct leaderboard IDs. Selecting a new level cancelled the partner's
+retry. No page errors occurred. A final Opus fix preserves custom V bindings
+and ignores key repeats; its nine focused browser checks pass.
+
+The live3330 process was restarted to load the rematch handler. The parent
+verified HTTP200 over the LAN and the new protocol's rejection of a rematch
+without a completed room. The camera preference is client presentation only;
+original cooperative distance limits and authoritative gameplay are unchanged.

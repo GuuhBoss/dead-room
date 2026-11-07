@@ -199,8 +199,11 @@ function showOver(rank) {
     : [['Level', level], ['Kills', kills], ['Best multiplier', `x${combo.best}`], ['Room', room], ['Time', time]];
   $('stats').innerHTML = rows.map(([k, v]) => `<div><dt>${k}</dt><dd>${escapeHtml(String(v))}</dd></div>`).join('');
   $('over-rank').textContent = rank;
-  $('again').hidden = game.online;
+  // Online, Retry / Replay asks everyone in the room to play again.
+  $('again').hidden = false;
+  $('again').disabled = false;
   $('again').textContent = dm ? 'Replay' : 'Retry';
+  $('rematch-status').hidden = true;
   $('over-board').hidden = dm;
   screen('over');
   $('touch').hidden = true;
@@ -466,7 +469,11 @@ addEventListener('keydown', e => {
   if (onButton && (code === 'Enter' || code === 'Space')) return;
   if (!$('setup').hidden && code === 'Enter') { e.preventDefault(); startLocal(); }
   if (!$('setup').hidden && (code === 'ArrowLeft' || code === 'ArrowRight')) chooseRoom(menu.room + (code === 'ArrowLeft' ? -1 : 1));
-  if (overShown && !game.online && code === 'Enter' && performance.now() - game.overAt > 800) startLocal();
+  if (overShown && code === 'Enter' && performance.now() - game.overAt > 800) again();
+  // V switches the online view, once per press, unless V is one of this
+  // player's own controls (online uses player 1's keys); then it only plays.
+  const vBound = Object.values(bindsFor(0)).some(list => list.includes(code));
+  if (code === 'KeyV' && !e.repeat && !vBound && game.online && game.state === 'playing' && players.length > 1) { net.setView(net.view === 'own' ? 'shared' : 'own'); net.note(net.view === 'own' ? 'Own view: the camera follows you.' : 'Shared view: one camera for both players.'); }
 });
 addEventListener('keyup', e => keys.delete(e.code));
 addEventListener('blur', () => { keys.clear(); if (!game.online && game.state === 'playing' && !paused && !overShown) togglePause(); });
@@ -478,7 +485,8 @@ $('play').onclick = startLocal;
 $('keys-reset').onclick = resetKeys;
 $('resume').onclick = togglePause;
 $('quit').onclick = toMenu;
-$('again').onclick = startLocal;
+const again = () => (game.online ? net.requestRematch() : startLocal());
+$('again').onclick = again;
 $('tomenu').onclick = toMenu;
 $('swap-views').onclick = () => { swapViews(); if (document.activeElement) document.activeElement.blur(); };
 $('over-board').onclick = () => { const r = game.roomIndex, m = game.mode === 2 ? 'coop' : 'solo'; toMenu(); board.open(r, m); screen('board'); };
@@ -588,7 +596,7 @@ function frame(now) {
   if (game.state === 'over' && !overShown) {
     if (game.online) net.over(); else localOver();
   }
-  const swap = !(game.mode === 3 && game.state === 'playing' && !paused && !overShown);
+  const swap = !(splitMode() && game.state === 'playing' && !paused && !overShown);
   if ($('swap-views').hidden !== swap) $('swap-views').hidden = swap;
   pressed.clear();
   draw();

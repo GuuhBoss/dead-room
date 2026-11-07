@@ -419,6 +419,11 @@ on the frontend:
   cancelled, when the page loses focus or is hidden, and when the screen turns.
   A Full screen button appears on phones whose browser supports it. The
   simulation never reads the view, so rules and online play are unchanged.
+- Online only: each player chooses a shared view (the original's one camera,
+  split screen in death match) or their own view (the camera follows only them,
+  one full view in death match with both players' deaths at the top); V
+  switches during play. After an online game Retry / Replay is a vote: when
+  everyone accepts, the room restarts as a new, separately ranked run.
 
 ## Shared simulation notes for the backend
 

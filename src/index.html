@@ -172,6 +172,11 @@
           <div class="lobby-code"><span>Room code</span><output id="lobby-code" class="code"></output><button class="pill small" id="copy-code" type="button">Copy</button></div>
           <dl class="lobby-facts"><dt>Room</dt><dd id="lobby-room"></dd><dt>Mode</dt><dd id="lobby-mode"></dd></dl>
           <ul id="lobby-players" class="lobby-players"></ul>
+          <fieldset class="seg view-choice" id="net-view"><legend>Screen</legend>
+            <label><input type="radio" name="net-view" value="shared" checked> Shared view</label>
+            <label><input type="radio" name="net-view" value="own"> Own view</label>
+            <small>Shared: one camera for both players, as on one computer (split screen in death match). Own: your camera follows only you. Each player chooses; V switches during play unless V is one of your controls.</small>
+          </fieldset>
           <p id="lobby-hint" class="muted"></p>
           <div class="row-end">
             <button class="pill quiet" id="net-leave" type="button">Leave</button>
@@ -229,6 +234,7 @@
         <button id="over-select">Select new level</button>
         <button id="again">Retry</button>
       </nav>
+      <p id="rematch-status" class="rematch-status" role="status" aria-live="polite" hidden></p>
     </section>
 
     <button id="swap-views" class="swap-views" hidden type="button" aria-label="Switch sides"></button>

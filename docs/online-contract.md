@@ -10,6 +10,7 @@ Client -> server:
 - `{type:'character',character:0|1|2|3}` changes only the sender's cosmetic selection while in the lobby. No playerId or extra keys accepted; locked after start.
 - `{type:'start'}` host only; starts solo immediately or two-player mode when two connected.
 - `{type:'input', seq:nonnegative integer, input:{dx:-1|0|1,dy:-1|0|1,fire:boolean,prev:boolean,next:boolean,select:integer,tap?:boolean}}` (select -1 means none). Send current held input ~30Hz; tap/prev/next/select are edges consumed once per tick. No score/state/dt accepted.
+- `{type:'rematch'}` only after the run is complete (otherwise an error). Records the sender's vote to play again; once every member of the room has voted, the server starts a new run in the same room (same mode, room index and characters, new `runId`).
 - `{type:'leave'}`
 - `{type:'ping', at:number}` -> `{type:'pong',at:number}`
 
@@ -18,6 +19,8 @@ Server -> client:
 - `{type:'lobby',code,mode,roomIndex,players:[{id,name,character}],hostId:0}` after membership or character changes. Host defaults to character3; guest to0.
 - `{type:'state',tick:number,snapshot:{game:{state:'playing'|'over',mode:1|2|3,roomIndex,demo:false},players,zombies,corpses,barrels,blocks,mines,pickups,shots,tracers,blasts,texts,score,kills,level,toSpawn,intermission,runTime,combo,upgrades,banner,toast,clock,shake,flashLight}}` at 20Hz. Entity shapes match shared src simulation, including look objects. Infinite ammo serialized null, client restores null to Infinity for pistol. Do not include navigation flow fields, canvas caches or particle bulk.
 - `{type:'ended',reason:string}` on disconnect / timeout; abort does not rank.
+- `{type:'rematch',ready:[playerId…]}` to every member when a vote is recorded and not everyone has voted yet.
+- `{type:'restart',runId}` to every member when all have voted; the next `state` (tick 0) is the new run. Each run is ranked separately under its own `runId`. A rematch compiles a new simulation and spends one room creation from the creator's address budget; when that is exhausted every member gets `Rematch rate limit exceeded; try again shortly` and may vote again. Leaving or disconnecting still removes the room (`ended`), which cancels the vote. A completed room is kept for 60 seconds.
 - `{type:'error',message:string}` safe user error.
 
 Frontend must NOT call update() or endGame() / submit scores for online runs: hydrate state and render using server snapshots; locally animate visuals if desired. Network loss must stop online play, no silent offline ranking. All solo/local offline play explicitly unranked.

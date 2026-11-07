@@ -13,11 +13,13 @@ function drawHud() {
 // Hud_PlayerFrags: "Player N" and that player's deaths (PadFrags) above each
 // view; the names swap with the views (mViewSide_DeathMatch).
 function drawFrags() {
-  const panels = [9.9, 513.65], rects = splitRects();
+  // One view (online "own view"): player 1 on the left, player 2 on the right,
+  // clear of the phone's pause button.
+  const split = splitMode(), panels = split ? [9.9, 513.65] : [9.9, view.w - 126.35 - (view.fluid ? 60 / view.z : 0)], rects = splitRects();
   players.forEach((p, i) => {
-    const slot = i === 0 ? viewSide : 1 - viewSide;
+    const slot = split ? (i === 0 ? viewSide : 1 - viewSide) : i;
     // On a phone the labels sit in each view's top left corner.
-    const x = view.fluid ? rects[slot].x0 + 4 : panels[slot], y = view.fluid ? rects[slot].y0 + 16 : 78.1 - 27.25 + 0.5355 * 25;
+    const x = view.fluid && split ? rects[slot].x0 + 4 : panels[slot], y = view.fluid ? (split ? rects[slot].y0 : 0) + 16 : 78.1 - 27.25 + 0.5355 * 25;
     hudText(`Player ${i + 1}`, x + 1.05, y, 21.4, 'left');
     hudText(pad(p.deaths || 0, 2), x + 87.4, y, 21.4, 'left');
   });

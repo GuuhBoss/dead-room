@@ -65,7 +65,15 @@ The shared original-game lifecycle produces a final snapshot with
 `game.state: 'over'` after the original death delay. A downed cooperative player
 can respawn while their partner survives. The backend does not force an earlier
 game over. It records an authentic completed survival run once. A later
-start is rejected; leave and create a new room. An aborted run sends
+`start` is rejected. During the completed room's60-second retention, members
+may send `{type:'rematch'}`: all must vote before the server creates a fresh
+simulation and UUID in the same room. Mode, map, names and selected characters
+are preserved; scores, inputs, sequence counters and progression reset. A solo
+vote restarts immediately. Recompilation spends the creator IP's creation
+budget, and exhausted budgets cannot start another run. Votes cannot target
+another slot or room. Each authentic new survival defeat is ranked once under
+its own UUID; deathmatch runs remain excluded. Leaving or expiry cancels votes.
+An aborted run sends
 `{type:'ended',reason}` and releases all members. Leaving or disconnecting either
 member ends the entire room, including a lobby. There is no host migration,
 rejoin, client pause, score submission, or local fallback to online ranking.
@@ -90,7 +98,7 @@ smaller limits and temporary source paths for integration tests, never via HTTP.
 | Connection inactivity / missing WS pong | 30 seconds |
 | Lobby lifetime | 2 minutes from creation |
 | Playing lifetime | 2 hours from start, then abort without ranking |
-| Completed room retention | 30 seconds |
+| Completed room retention | 60 seconds (time to vote for a rematch) |
 | IP limiter records | 1,024; idle records expire after 60 seconds |
 
 Inactivity and TTL cleanup occurs at least once per second. WS ping is sent
@@ -169,7 +177,7 @@ cases, including projectile gravity and floor bounce. Navigation retains the
 original3ms work budget, so scheduling under CPU pressure can affect the wave's
 completion frame; seeded simulation is not a promise of identical routing
 under arbitrary host load. A finite guard avoids NaN on coincident body centres.
-The full suite currently passes61 tests. Static serving now recognizes the
+The full suite currently passes65 tests. Static serving now recognizes the
 original MP3 audio, WOFF fonts and JPEG previews; an HTTP regression check
 verifies their MIME types and HEAD behavior.
 

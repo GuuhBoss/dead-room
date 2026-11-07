@@ -72,8 +72,12 @@ const sy = (y, z = 0) => (y - z * PF) * CELL;
 // The view follows the players' mean position, easing at 0.16 cells a frame
 // plus a fifth of any lag beyond that, and stops at the room's edges.
 const cam = { tx: null, ty: null, x: 0, y: 0, pan: 0 };
+// Online "own view": this client's camera follows only its own player.
+const ownView = () => game.online && net.view === 'own' && !!net.me && players.length > 1;
+
 function updateCamera(dt, jump) {
-  const list = players.filter(p => !p.down && p.state !== 'respawn');
+  const mine = ownView() && players.find(p => p.id === net.me.playerId);
+  const list = mine ? [mine] : players.filter(p => !p.down && p.state !== 'respawn');
   const src = list.length ? list : players;
   if (!src.length || !room) return;
   const tx = src.reduce((s, p) => s + p.x, 0) / src.length, ty = src.reduce((s, p) => s + p.y, 0) / src.length;
@@ -502,7 +506,7 @@ function splitRects() {
 }
 let viewSide = (() => { try { return localStorage.getItem('deadrooms:viewSide') === '0' ? 0 : 1; } catch { return 1; } })();
 const splitCams = [{ x: 0, y: 0 }, { x: 0, y: 0 }];
-const splitMode = () => game.mode === 3 && game.state !== 'menu' && players.length === 2;
+const splitMode = () => game.mode === 3 && game.state !== 'menu' && players.length === 2 && !ownView();
 
 function swapViews() {
   viewSide = 1 - viewSide;

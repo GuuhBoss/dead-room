@@ -54,7 +54,12 @@ cannot submit a score. GET `/api/leaderboard` provides filtered persistent
 rankings; online solo and co-op are separate categories. Offline games are
 unranked. Online deathmatch defaults to ten frags, matching the original;
 offline options allow 5/10/20/50. Deathmatch results stay out of survival rankings.
-See the [protocol](docs/online-contract.md).
+After an online game, Retry / Replay asks everyone in the room to play again;
+when all accept, the same room restarts as a new run. In the lobby each player
+chooses a shared view (one camera, split screen in death match, as on one
+computer) or their own view (the camera follows only them); V switches it
+during play unless V is assigned to one of your controls. See the
+[protocol](docs/online-contract.md).
 
 ## Fidelity and validation
 
@@ -62,7 +67,7 @@ See the [protocol](docs/online-contract.md).
 publisher binary URL/hash, extracted rules, independent progression comparison,
 browser checks and remaining differences. [Acceptance checklist](docs/fidelity-validation.md)
 tracks the orchestrator's validation. No later Boxhead game's content is intended.
-All61 automated tests currently pass. Independent Chromium checks cover local
+All65 automated tests currently pass. Independent Chromium checks cover local
 deathmatch, two-client co-op/deathmatch, aborts and exact-ID survival ranking.
 Original fonts,29 sprite strips,26 sound samples and18 room definitions load;
 the standalone HTML plays with no HTTP requests. The original logo, menu

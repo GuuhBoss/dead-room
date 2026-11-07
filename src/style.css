@@ -241,6 +241,13 @@ table.scores { width: 100%; border-collapse: collapse; background: #fff; }
 .scores td:nth-child(3) { font: 800 22px/1 var(--sans); }
 .scores tr.mine td { background: #ffe2df; }
 
+/* Online lobby: each player's screen choice. */
+.view-choice { margin-top: 18px; }
+.view-choice small { flex-basis: 100%; color: var(--grey); font-weight: 400; font-size: 18px; }
+/* Online debrief: who has asked to play again. */
+.rematch-status { position: absolute; top: 860px; left: 140px; right: 140px; margin: 0; text-align: center; font: 700 24px/1.3 var(--sans); color: var(--red); text-shadow: 0 0 8px #fff; }
+.debrief-links button[disabled] { opacity: 0.45; cursor: default; text-decoration: none; }
+
 /* HUD.Paused: a translucent brown bar and a near-black panel over the game. */
 #pause { background: rgba(0, 0, 0, 0.85); }
 .pause-bar { position: absolute; left: 0; right: 0; top: 0; height: 132px; background: rgba(152, 51, 0, 0.8); text-align: center; }
@@ -456,6 +463,9 @@ body.fluid { display: block; overscroll-behavior: none; --arrow: clamp(44px, 12v
 .fluid .stats dd { font-size: 20px; }
 .fluid .debrief-links { position: static; gap: 2px; }
 .fluid .debrief-links button { min-height: 48px; font-size: 22px; }
+
+.fluid .rematch-status { position: static; font-size: 16px; }
+.fluid .view-choice small { font-size: 14px; }
 
 /* Death match side swap, at the seam between the two views. */
 .fluid .swap-views { left: auto; right: calc(env(safe-area-inset-right) + 6px); top: calc(var(--game-top, 0px) + var(--game-h) / 2 - 22px); width: 66px; height: 44px; background-size: 52px auto; }
