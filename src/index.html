@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
+<div id="safe-probe" aria-hidden="true"></div>
 <div id="stage">
   <canvas id="game" aria-label="Dead Rooms play area"></canvas>
   <div id="ui">
@@ -27,6 +28,7 @@
       <nav class="extras" aria-label="Online">
         <button data-go="online">Play online</button>
         <button data-go="board">Global leaderboard</button>
+        <button id="fullscreen" type="button" hidden>Full screen</button>
       </nav>
       <p class="fineprint">Dead Rooms, an unofficial recreation of Boxhead: 2Play Rooms (2007). Offline games are not ranked.</p>
     </section>
@@ -232,7 +234,7 @@
     <button id="swap-views" class="swap-views" hidden type="button" aria-label="Switch sides"></button>
 
     <div id="touch" hidden>
-      <div id="stickzone"><div id="stick" hidden><div id="knob"></div></div></div>
+      <div id="stickzone"><div id="stick-home" aria-hidden="true"></div><div id="stick" hidden><div id="knob"></div></div></div>
       <button id="t-swap" aria-label="Next weapon">Swap</button>
       <button id="t-fire" aria-label="Fire">Fire</button>
       <button id="t-pause" aria-label="Pause">II</button>

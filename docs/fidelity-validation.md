@@ -133,3 +133,28 @@ completed frontend implementation and the final direction-boundary correction;
 the parent completed backend integration and independent validation on
 7 November2026. No resume schedule remains enabled. No claim of indistinguishable
 Flash Player output is made.
+
+## User-requested mobile layout improvement
+
+The user subsequently requested a larger phone layout. Opus separated phone
+menus and touch controls from the scaled desktop overlay and added a fluid
+rendering viewport. This deliberately adapts mobile framing; original shared
+simulation sources01-03, backend and network protocol were unchanged.
+
+Parent measured the390×844 portrait game view increasing from390×292.5 to
+390×591, with a separate thumb-control deck.844×390 landscape now uses the
+entire844×390 instead of520×390. Layout checks covered390×844,360×800,
+320×568,844×390 and568×320, without horizontal overflow. Fire/Swap/Pause fit
+inside each viewport; menu arrow targets and Highscores were corrected to at
+least44 pixels. Desktop retained640×480 logical framing at1280×960,640×480
+and1024×768.
+
+Independent CDP multi-touch checks passed at three sizes: simultaneous move
+and fire, lifting Fire while movement continues, lifting all fingers stops,
+weapon swap, pause/resume, blur cancellation and rotation cancellation. A
+portrait host and landscape guest both moved their authoritative player on
+the other client, sent touch fire through the actual WebSocket protocol, and
+released controls; disconnect remained unranked. No page errors occurred.
+All61 automated tests, bundle syntax and whitespace checks pass. These checks
+used Chromium phone emulation; real iPhone/Safari and physical notches/soft
+keyboards have not been independently tested.

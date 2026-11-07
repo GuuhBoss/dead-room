@@ -13,9 +13,11 @@ function drawHud() {
 // Hud_PlayerFrags: "Player N" and that player's deaths (PadFrags) above each
 // view; the names swap with the views (mViewSide_DeathMatch).
 function drawFrags() {
-  const panels = [9.9, 513.65];
+  const panels = [9.9, 513.65], rects = splitRects();
   players.forEach((p, i) => {
-    const slot = i === 0 ? viewSide : 1 - viewSide, x = panels[slot], y = 78.1 - 27.25 + 0.5355 * 25;
+    const slot = i === 0 ? viewSide : 1 - viewSide;
+    // On a phone the labels sit in each view's top left corner.
+    const x = view.fluid ? rects[slot].x0 + 4 : panels[slot], y = view.fluid ? rects[slot].y0 + 16 : 78.1 - 27.25 + 0.5355 * 25;
     hudText(`Player ${i + 1}`, x + 1.05, y, 21.4, 'left');
     hudText(pad(p.deaths || 0, 2), x + 87.4, y, 21.4, 'left');
   });
@@ -24,7 +26,7 @@ function drawFrags() {
 // Hud.ScoreTotal: tfScore (40 px at 0.765), tfMultiple "xN" (24 px at 0.823)
 // and mcTimer (101 frames at 0.68) showing mMultiplierTickRatio.
 function drawScore() {
-  const cx = W / 2;
+  const cx = view.w / 2;
   hudText(pad(score, 12), cx, -1.7 + 0.765 * 24, 30.6, 'center');
   const timer = art.sprites.hudTimer;
   if (timer) drawSprite('hudTimer', Math.min(100, Math.floor(clamp(combo.ratio, 0, 1) * 101)), cx + 62.05, 23.25, 1, 0, 0.68, 0.68);
@@ -37,7 +39,7 @@ function drawScore() {
 function drawScoreFlights() {
   for (const t of texts) {
     if (t.kind !== 'score') continue;
-    const x0 = sx(t.x) - cam.x, y0 = sy(t.y) - cam.y, dx = W / 2 - x0, dy = -y0, d = Math.hypot(dx, dy) || 1;
+    const x0 = sx(t.x) - cam.x, y0 = sy(t.y) - cam.y, dx = view.w / 2 - x0, dy = -y0, d = Math.hypot(dx, dy) || 1;
     const run = 5 * (Math.pow(1.05, t.t) - 1) / 0.05, y = y0 + (dy / d) * run;
     if (y <= 0) continue;
     ctx.globalAlpha = y < 140 ? clamp((y - 40) / 100, 0, 1) : 1;
@@ -52,7 +54,7 @@ function drawScoreFlights() {
 const hudMessages = [];
 function addHudMessage(text, color) {
   for (const m of hudMessages) m.move += 19;
-  hudMessages.push({ text, color, y: H, move: 100, at: performance.now() });
+  hudMessages.push({ text, color, y: view.h, move: 100, at: performance.now() });
 }
 function tickHudMessages() {
   for (const m of hudMessages) { const step = m.move * 0.25; m.y -= step; m.move -= step; }
@@ -60,9 +62,9 @@ function tickHudMessages() {
 function drawMessages() {
   const now = performance.now();
   while (hudMessages.length && now - hudMessages[0].at >= 3000) hudMessages.shift();
-  for (const m of hudMessages) hudText(m.text, W / 2, m.y + 1.45 + 0.72 * 14.4, 17.3, 'center', m.color);
-  if (game.online && net.lag > 0.6 && game.state === 'playing') hudText('Waiting for the server…', W / 2, 92, 14.2, 'center', '#b0c4de');
-  else if (net.noteText && performance.now() < net.noteUntil) hudText(net.noteText, W / 2, 92, 14.2, 'center', '#b0c4de');
+  for (const m of hudMessages) hudText(m.text, view.w / 2, m.y + 1.45 + 0.72 * 14.4, 17.3, 'center', m.color);
+  if (game.online && net.lag > 0.6 && game.state === 'playing') hudText('Waiting for the server…', view.w / 2, 92, 14.2, 'center', '#b0c4de');
+  else if (net.noteText && performance.now() < net.noteUntil) hudText(net.noteText, view.w / 2, 92, 14.2, 'center', '#b0c4de');
 }
 
 // CHud.UpdatePlayer: mcAmmo "Short:ammo" (just the name when ammo is

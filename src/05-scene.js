@@ -1,17 +1,63 @@
 // ─── Stage ──────────────────────────────────────────────────────────────────
+// Classic: the original 640 × 480 stage scaled to fit, with the DOM overlay
+// working in 1280 × 960. Fluid (phones and small windows): the game fills the
+// screen at a zoom that keeps about the original 20 × 15 cells in view, shaped
+// to the screen; portrait touch screens keep a control deck under the game,
+// and menus are laid out for the screen instead of being scaled down. Only
+// the presentation changes: the simulation never reads the view.
 const stage = $('stage'), ui = $('ui');
 const UI_W = W * 2, UI_H = H * 2;                 // DOM overlay works in 1280 × 960
 const PF = Math.sin(Math.PI / 4);                 // -CThing_Position.mPFactor: height to screen
+const view = { w: W, h: H, z: 1, fluid: false, portrait: false, deck: 0 };
+const coarsePointer = matchMedia('(pointer: coarse)');
 let viewScale = 1;
 
+const touchLayout = () => coarsePointer.matches || touch.used;
+
+// env(safe-area-inset-*) as numbers, read from a probe element.
+function safeArea() {
+  const st = getComputedStyle($('safe-probe'));
+  return { top: parseFloat(st.paddingTop) || 0, right: parseFloat(st.paddingRight) || 0, bottom: parseFloat(st.paddingBottom) || 0, left: parseFloat(st.paddingLeft) || 0 };
+}
+
 function resize() {
-  const scale = Math.min(innerWidth / W, innerHeight / H);
-  viewScale = scale;
-  pixel = scale * Math.min(window.devicePixelRatio || 1, 2);
-  stage.style.width = `${W * scale}px`;
-  stage.style.height = `${H * scale}px`;
-  ui.style.transform = `scale(${scale / 2})`;
-  const cw = Math.max(1, Math.round(W * pixel)), ch = Math.max(1, Math.round(H * pixel));
+  const root = document.documentElement, sw = root.clientWidth || innerWidth, sh = innerHeight;
+  const classic = Math.min(sw / W, sh / H);
+  view.fluid = classic < 1 || (coarsePointer.matches && Math.min(sw, sh) < 600);
+  // A turned screen lets go of anything held on the touch controls.
+  if (view.portrait !== (sh > sw)) releaseTouch();
+  view.portrait = sh > sw;
+  document.body.classList.toggle('fluid', view.fluid);
+  document.body.classList.toggle('portrait', view.fluid && view.portrait);
+  document.body.classList.toggle('landscape', view.fluid && !view.portrait);
+  if (!view.fluid) {
+    Object.assign(view, { w: W, h: H, z: classic, deck: 0 });
+    stage.style.width = `${W * classic}px`;
+    stage.style.height = `${H * classic}px`;
+    ui.style.transform = `scale(${classic / 2})`;
+  } else {
+    // Portrait keeps the notch and the home bar out of the game; landscape
+    // runs under them and keeps only the controls clear of them.
+    const safe = safeArea(), top = view.portrait ? safe.top : 0;
+    const deck = view.portrait && touchLayout() ? Math.round(clamp(sh * 0.3, 190, 280) + safe.bottom) : 0;
+    const gw = sw, gh = sh - deck - top;
+    // The same area of room as the original view, at least ten cells across;
+    // small phones zoom in a little further while twelve cells still fit.
+    const z = clamp(Math.max(Math.sqrt((gw * gh) / (W * H)), Math.min(0.72, gw / (12 * CELL))), 0.5, gw / (10 * CELL));
+    Object.assign(view, { w: gw / z, h: gh / z, z, deck });
+    stage.style.width = stage.style.height = '';
+    ui.style.transform = '';
+    root.style.setProperty('--game-top', `${top}px`);
+    root.style.setProperty('--game-w', `${gw}px`);
+    root.style.setProperty('--game-h', `${gh}px`);
+    root.style.setProperty('--deck-h', `${deck}px`);
+  }
+  canvas.style.width = view.fluid ? `${view.w * view.z}px` : '';
+  canvas.style.height = view.fluid ? `${view.h * view.z}px` : '';
+  viewScale = view.z;
+  pixel = view.z * Math.min(window.devicePixelRatio || 1, 2);
+  const cw = Math.max(1, Math.round(view.w * pixel)), ch = Math.max(1, Math.round(view.h * pixel));
+  if (room && cam.tx !== null) placeCamera(cam.tx, cam.ty);
   if (canvas.width === cw && canvas.height === ch) return;
   canvas.width = cw; canvas.height = ch;
   labels.clear();
@@ -45,8 +91,8 @@ function updateCamera(dt, jump) {
 
 function placeCamera(cx, cy) {
   const rw = room.cols * CELL, rh = room.rows * CELL;
-  cam.x = rw <= W ? (rw - W) / 2 : clamp(cx * CELL - W / 2, 0, rw - W);
-  cam.y = rh <= H ? (rh - H) / 2 : clamp(cy * CELL - H / 2, 0, rh - H);
+  cam.x = rw <= view.w ? (rw - view.w) / 2 : clamp(cx * CELL - view.w / 2, 0, rw - view.w);
+  cam.y = rh <= view.h ? (rh - view.h) / 2 : clamp(cy * CELL - view.h / 2, 0, rh - view.h);
 }
 
 // ─── Room layers ────────────────────────────────────────────────────────────
@@ -443,6 +489,17 @@ const label = (text, x, y, size, fill = '#fff', align = 'center') => hudText(tex
 // 480 × 480 view shrunk to 320 × 320 and centred vertically. With the saved
 // default view side, player 1 (arrow keys) is on the right.
 const SPLIT = { size: 480, scale: 320 / 480, top: 80 };
+// The two views by slot: the original layout, or on a phone stacked
+// (portrait) or side by side (landscape) at the game's own zoom.
+function splitRects() {
+  if (!view.fluid) return [0, 1].map(slot => ({ x0: slot * (W / 2), y0: SPLIT.top, w: SPLIT.size, h: SPLIT.size, k: SPLIT.scale }));
+  if (view.portrait) {
+    const h = (view.h - 2) / 2;
+    return [{ x0: 0, y0: 0, w: view.w, h, k: 1 }, { x0: 0, y0: h + 2, w: view.w, h, k: 1 }];
+  }
+  const w = (view.w - 2) / 2;
+  return [{ x0: 0, y0: 0, w, h: view.h, k: 1 }, { x0: w + 2, y0: 0, w, h: view.h, k: 1 }];
+}
 let viewSide = (() => { try { return localStorage.getItem('deadrooms:viewSide') === '0' ? 0 : 1; } catch { return 1; } })();
 const splitCams = [{ x: 0, y: 0 }, { x: 0, y: 0 }];
 const splitMode = () => game.mode === 3 && game.state !== 'menu' && players.length === 2;
@@ -454,11 +511,12 @@ function swapViews() {
 
 // Each view follows its own player directly, held while that player is down.
 function trackSplit() {
-  const rw = room.cols * CELL, rh = room.rows * CELL, v = SPLIT.size;
+  const rw = room.cols * CELL, rh = room.rows * CELL, rects = splitRects();
   players.forEach((p, i) => {
     if (p.down || p.state === 'respawn') return;
-    splitCams[i].x = rw <= v ? (rw - v) / 2 : clamp(p.x * CELL - v / 2, 0, rw - v);
-    splitCams[i].y = rh <= v ? (rh - v) / 2 : clamp(p.y * CELL - v / 2, 0, rh - v);
+    const { w, h } = rects[i === 0 ? viewSide : 1 - viewSide];
+    splitCams[i].x = rw <= w ? (rw - w) / 2 : clamp(p.x * CELL - w / 2, 0, rw - w);
+    splitCams[i].y = rh <= h ? (rh - h) / 2 : clamp(p.y * CELL - h / 2, 0, rh - h);
   });
 }
 
@@ -472,16 +530,17 @@ function draw() {
   let seen = 0;
   if (splitMode()) {
     trackSplit();
+    const rects = splitRects();
     players.forEach((p, i) => {
-      const slot = i === 0 ? viewSide : 1 - viewSide, c = splitCams[i];
-      seen = Math.max(seen, drawWorld(Math.round(c.x - ox), Math.round(c.y - oy), SPLIT.size, SPLIT.size, slot * (W / 2), SPLIT.top, SPLIT.scale));
+      const r = rects[i === 0 ? viewSide : 1 - viewSide], c = splitCams[i];
+      seen = Math.max(seen, drawWorld(Math.round(c.x - ox), Math.round(c.y - oy), r.w, r.h, r.x0, r.y0, r.k));
     });
-  } else seen = drawWorld(Math.round(cam.x - ox), Math.round(cam.y - oy), W, H, 0, 0, 1);
+  } else seen = drawWorld(Math.round(cam.x - ox), Math.round(cam.y - oy), view.w, view.h, 0, 0, 1);
   ambience.onScreen = seen;
   ctx.setTransform(pixel, 0, 0, pixel, 0, 0);
   if (flashLight > 0) {
     ctx.fillStyle = `rgba(255,255,255,${flashLight * 0.3})`;
-    ctx.fillRect(0, 0, W, H);
+    ctx.fillRect(0, 0, view.w, view.h);
   }
   drawHud();
 }
@@ -490,9 +549,11 @@ function draw() {
 function drawLoading() {
   ctx.setTransform(pixel, 0, 0, pixel, 0, 0);
   ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, W, H);
-  if (art.title.loading) ctx.drawImage(art.title.loading, 0, 0, W, H);
-  else if (art.error) hudText('The game files could not be loaded.', W / 2, H / 2, 24, 'center', '#ff0000', true, false);
+  ctx.fillRect(0, 0, view.w, view.h);
+  // The 640 × 480 screen, whole and centred on a phone.
+  const k = Math.min(view.w / W, view.h / H);
+  if (art.title.loading) ctx.drawImage(art.title.loading, (view.w - W * k) / 2, (view.h - H * k) / 2, W * k, H * k);
+  else if (art.error) hudText('The game files could not be loaded.', view.w / 2, view.h / 2, 24, 'center', '#ff0000', true, false);
 }
 
 // The world seen from (vx, vy), vw × vh pixels, drawn at (x0, y0) scaled by k.

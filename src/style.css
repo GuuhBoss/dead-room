@@ -302,3 +302,205 @@ table.scores { width: 100%; border-collapse: collapse; background: #fff; }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
 }
+
+#safe-probe { position: fixed; left: 0; top: 0; visibility: hidden; pointer-events: none; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+#fullscreen { display: none; }
+#t-fire.held { background: rgba(200, 30, 30, 0.8); }
+
+/* ─── Phones and small windows (body.fluid, set by resize) ───────────────────
+   The game canvas fills the screen at its own size (see resize in
+   05-scene.js) and the DOM overlay is no longer a scaled 1280 × 960 stage:
+   every screen is a scrolling column in screen pixels, with 44 px targets and
+   safe-area margins. Portrait touch screens keep a control deck under the
+   game (--deck-h); landscape lays the controls over the game's corners. */
+body.fluid { display: block; overscroll-behavior: none; --arrow: clamp(44px, 12vw, 48px); } /* arrow tap width */
+.fluid #stage { position: fixed; inset: 0; box-shadow: none; background: #000; }
+.fluid #game { inset: auto; left: 0; top: var(--game-top, 0px); }
+.fluid #ui { position: fixed; inset: 0; width: auto; height: auto; transform: none; }
+.fluid #fullscreen { display: inline-block; }
+.fluid button { touch-action: manipulation; }
+.fluid :focus-visible { outline-width: 3px; }
+
+.fluid .screen.page, .fluid .debrief {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  padding: calc(env(safe-area-inset-top) + 66px) calc(env(safe-area-inset-right) + 14px) calc(env(safe-area-inset-bottom) + 28px) calc(env(safe-area-inset-left) + 14px);
+  background: #fff var(--menu-bg, none) center top / cover no-repeat;
+  font-size: 17px;
+  scroll-padding: 80px 0;
+}
+.fluid .screen.page > *, .fluid .debrief > * { flex: none; max-width: 100%; }
+.fluid .back {
+  position: fixed;
+  z-index: 6;
+  left: calc(env(safe-area-inset-left) + 10px);
+  top: calc(env(safe-area-inset-top) + 10px);
+  min-height: 44px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  font-size: 17px;
+}
+.fluid .pill { min-width: 110px; min-height: 44px; padding: 9px 18px; font-size: 18px; -webkit-text-stroke-width: 3px; }
+.fluid .pill.small { min-width: 96px; font-size: 16px; padding: 8px 14px; }
+.fluid select, .fluid input { min-height: 44px; font-size: 17px; }
+.fluid .status { font-size: 15px; }
+
+/* Screen_Main: logo, the four items, then the online links. */
+.fluid #menu { justify-content: center; gap: 10px; padding-top: calc(env(safe-area-inset-top) + 16px); }
+.fluid .title-logo { position: static; width: min(100%, 520px); height: auto; }
+.fluid .mainnav { position: static; gap: 2px; }
+.fluid .mainnav button { min-height: 48px; padding: 2px 12px; font-size: clamp(30px, 9.4vw, 46px); }
+.fluid .extras { position: static; flex-wrap: wrap; gap: 10px; margin-top: 6px; }
+.fluid .extras button { min-height: 44px; padding: 10px 18px; font-size: 17px; }
+.fluid .fineprint { position: static; max-width: 30em; padding: 0 6px; font-size: 13px; }
+
+/* Room screen. */
+.fluid .objective { position: static; white-space: normal; font-size: clamp(30px, 9vw, 56px); line-height: 1.02; letter-spacing: 0; }
+.fluid .objective-sub, .fluid #setup .objective-sub { position: static; max-width: 34em; font-size: 15px; }
+.fluid .chars, .fluid .chars.two { position: static; display: flex; flex-wrap: wrap; justify-content: center; width: auto; gap: 10px 14px; }
+.fluid .charpick { grid-template-columns: var(--arrow) 104px var(--arrow); gap: 4px; }
+.fluid .charcard { width: 104px; height: 104px; }
+.fluid .charcard b { left: 6px; top: 5px; font-size: 15px; }
+.fluid .charpick .arrow { width: var(--arrow); height: 56px; }
+.fluid .level { position: static; display: grid; grid-template-columns: var(--arrow) minmax(0, 1fr) var(--arrow); align-items: center; gap: 4px; width: 100%; max-width: 600px; }
+.fluid .level-card { min-width: 0; gap: 4px; }
+.fluid .level .arrow { width: var(--arrow); height: 72px; }
+.fluid .thumb { width: 100%; height: auto; aspect-ratio: 350 / 182; box-shadow: 4px 6px 10px rgba(0, 0, 0, 0.3); }
+.fluid .thumb .count { font-size: 14px; }
+.fluid .thumb .room-name { min-width: 0; padding: 4px 18px 3px; font-size: clamp(15px, 4.6vw, 24px); white-space: nowrap; }
+.fluid .highscores { min-height: 44px; font-size: 16px; }
+.fluid .click { margin: 0; font-size: 16px; }
+.fluid .setup-buttons { position: static; gap: 14px; }
+.fluid .setup-buttons .pill { min-width: 132px; font-size: 20px; -webkit-text-stroke-width: 4px; }
+.fluid .setup-note { position: static; font-size: 14px; }
+
+/* Options and Controls windows: full screen, scrolling. */
+.fluid .window { position: fixed; z-index: 10; display: block; overflow-y: auto; overscroll-behavior: contain; padding: calc(env(safe-area-inset-top) + 10px) calc(env(safe-area-inset-right) + 8px) calc(env(safe-area-inset-bottom) + 20px) calc(env(safe-area-inset-left) + 8px); }
+.fluid .window-box { width: auto; max-width: 680px; margin: 0 auto; padding: 16px 14px; }
+.fluid .opt { grid-template-columns: 1fr; row-gap: 6px; margin-bottom: 14px; }
+.fluid .opt > span { font-size: 18px; }
+.fluid .choices { flex-wrap: wrap; gap: 8px; }
+.fluid .choices button { flex: 1 1 40%; min-width: 0; min-height: 44px; font-size: 15px; -webkit-text-stroke-width: 3px; }
+.fluid .opt small { font-size: 13px; }
+.fluid .window-title { font-size: 20px; }
+.fluid .keys { grid-template-columns: 1fr; gap: 14px; }
+.fluid .keys h4 { font-size: 17px; }
+.fluid .keybind { min-height: 44px; font-size: 15px; }
+.fluid .keybind kbd { min-width: 112px; font-size: 13px; }
+.fluid .window-text { font-size: 14px; }
+.fluid .window-foot { gap: 14px; }
+
+/* Instructions. */
+.fluid .help-title { position: static; font-size: 24px; }
+.fluid .help-tabs { position: static; flex-wrap: wrap; justify-content: center; gap: 0 14px; }
+.fluid .help-tabs button { min-height: 44px; padding: 0 4px; font-size: 16px; }
+.fluid .help-page { position: static; width: 100%; max-width: 680px; overflow: visible; font-size: 16px; }
+.fluid .help-list dd { margin-left: 16px; }
+.fluid .help-note { font-size: 14px; }
+.fluid .help-characters { grid-template-columns: 1fr; font-size: 15px; }
+.fluid .help-characters .card-art, .fluid .help-characters canvas { width: 92px; height: 92px; }
+
+/* Online lobby and the leaderboard. */
+.fluid .online-body { position: static; width: 100%; max-width: 680px; }
+.fluid .split { grid-template-columns: 1fr; gap: 14px; margin-top: 14px; }
+.fluid .card { padding: 14px; gap: 10px; }
+.fluid .card h3 { font-size: 20px; }
+.fluid .seg { gap: 0 18px; }
+.fluid .seg label { min-height: 44px; }
+.fluid input.code, .fluid output.code { font-size: 22px; }
+.fluid .lobby-code { flex-wrap: wrap; gap: 10px; }
+.fluid .lobby-facts { margin: 12px 0; }
+.fluid .lobby-players { grid-template-columns: 1fr; gap: 8px; }
+.fluid .lobby-players li { gap: 10px; padding: 8px; font-size: 15px; }
+.fluid .lobby-players .charpick { grid-template-columns: var(--arrow) 96px var(--arrow); }
+.fluid .lobby-players .charcard { width: 96px; height: 96px; }
+.fluid .row-end { flex-wrap: wrap; justify-content: center; gap: 12px; }
+.fluid .board-controls { position: static; flex-wrap: wrap; justify-content: center; gap: 8px 10px; width: 100%; max-width: 680px; }
+.fluid #board-room { flex: 1 1 0; min-width: 0; font-size: 19px; }
+.fluid #board-mode { margin-left: 0; }
+.fluid .arrow.small { width: var(--arrow); height: 56px; }
+.fluid .table-wrap { position: static; width: 100%; max-width: 680px; max-height: none; overflow-x: auto; flex: none; }
+.fluid .scores th, .fluid .scores td { padding: 8px 10px; font-size: 14px; }
+.fluid .scores td:nth-child(3) { font-size: 16px; }
+.fluid #board-status { position: static; }
+
+/* HUD.Paused: the bar stays at the top while the list scrolls. */
+.fluid #pause { position: fixed; inset: 0; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; }
+.fluid .pause-bar { position: sticky; z-index: 1; top: 0; height: auto; padding: calc(env(safe-area-inset-top) + 8px) 12px 8px; }
+.fluid .pause-bar h2 { margin: 0; font-size: 34px; }
+.fluid #quit { min-height: 44px; margin: 0 auto; font-size: 26px; }
+.fluid .pause-extra { position: static; justify-content: center; gap: 10px; }
+.fluid .pause-extra button { min-height: 44px; padding: 0 10px; font-size: 17px; }
+.fluid .pause-body { position: static; padding: 12px calc(env(safe-area-inset-right) + 12px) calc(env(safe-area-inset-bottom) + 20px) calc(env(safe-area-inset-left) + 12px); }
+.fluid .pause-body h3 { font-size: 22px; }
+.fluid .pause-note { font-size: 14px; }
+.fluid .upgrade-list { grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 6px; font-size: 14px; }
+
+/* Debriefs. */
+.fluid .debrief { justify-content: center; }
+.fluid .end-text { position: static; font-size: 26px; }
+.fluid .final { position: static; font-size: clamp(34px, 11.5vw, 70px); }
+.fluid .final.winner { width: 100%; padding: 12px 10px; font-size: clamp(28px, 8vw, 48px); -webkit-text-stroke-width: 4px; }
+.fluid .rank { position: static; font-size: 15px; }
+.fluid .stats { position: static; flex-wrap: wrap; gap: 10px 20px; }
+.fluid .stats dt { font-size: 14px; }
+.fluid .stats dd { font-size: 20px; }
+.fluid .debrief-links { position: static; gap: 2px; }
+.fluid .debrief-links button { min-height: 48px; font-size: 22px; }
+
+/* Death match side swap, at the seam between the two views. */
+.fluid .swap-views { left: auto; right: calc(env(safe-area-inset-right) + 6px); top: calc(var(--game-top, 0px) + var(--game-h) / 2 - 22px); width: 66px; height: 44px; background-size: 52px auto; }
+.fluid.landscape .swap-views { right: auto; left: calc(50% - 33px); top: auto; bottom: calc(env(safe-area-inset-bottom) + 6px); }
+
+/* Touch controls in screen pixels. */
+.fluid #touch { position: fixed; inset: 0; -webkit-touch-callout: none; }
+.fluid #stick::before { left: -58px; top: -58px; width: 116px; height: 116px; border-width: 3px; }
+.fluid #knob { left: -27px; top: -27px; width: 54px; height: 54px; border-width: 3px; }
+.fluid #touch button { border-width: 3px; font-size: 18px; -webkit-text-stroke-width: 3px; }
+.fluid #t-pause { top: calc(var(--game-top, 0px) + 8px); right: calc(env(safe-area-inset-right) + 8px); width: 48px; height: 48px; font-size: 18px; }
+/* Portrait: the deck under the game. */
+.fluid.portrait #touch::before { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: var(--deck-h); background: linear-gradient(#202020, #0f0f0f); box-shadow: inset 0 2px 0 #2c2c2c; }
+.fluid.portrait #stickzone { top: auto; bottom: 0; left: 0; width: 60%; height: var(--deck-h); }
+.fluid.portrait #touch { --fire: clamp(84px, 26vw, 104px); --swap: clamp(56px, 16vw, 64px); }
+.fluid.portrait #t-fire { right: calc(env(safe-area-inset-right) + 18px); bottom: calc(env(safe-area-inset-bottom) + max(18px, (var(--deck-h) - env(safe-area-inset-bottom) - var(--fire)) / 2)); width: var(--fire); height: var(--fire); font-size: 22px; }
+.fluid.portrait #t-swap { right: calc(env(safe-area-inset-right) + 32px + var(--fire)); bottom: calc(env(safe-area-inset-bottom) + max(18px, (var(--deck-h) - env(safe-area-inset-bottom) - var(--fire)) / 2) + var(--fire) * 0.55); width: var(--swap); height: var(--swap); font-size: 15px; }
+/* Landscape: the game fills the screen and the controls sit on its corners. */
+.fluid.landscape #stickzone { top: 22%; bottom: 0; left: 0; width: 46%; }
+.fluid.landscape #t-fire { right: calc(env(safe-area-inset-right) + 22px); bottom: calc(env(safe-area-inset-bottom) + 18px); width: 96px; height: 96px; font-size: 20px; }
+.fluid.landscape #t-swap { right: calc(env(safe-area-inset-right) + 130px); bottom: calc(env(safe-area-inset-bottom) + 26px); width: 64px; height: 64px; font-size: 16px; }
+
+/* Where the stick rests: a faint ring, gone while a thumb holds the stick. */
+#stick-home { display: none; }
+.fluid #stick-home { display: block; position: absolute; width: 104px; height: 104px; margin: -52px 0 0 -52px; border: 3px solid rgba(255, 255, 255, 0.28); border-radius: 50%; pointer-events: none; }
+.fluid #stick-home::after { content: ''; position: absolute; inset: 27px; border-radius: 50%; background: rgba(255, 255, 255, 0.22); }
+.fluid #stickzone.active #stick-home { display: none; }
+.fluid.portrait #stick-home { left: calc(env(safe-area-inset-left) + min(92px, 22vw)); top: 50%; }
+.fluid.landscape #stick-home { left: calc(env(safe-area-inset-left) + 96px); bottom: calc(env(safe-area-inset-bottom) + 28px); margin-bottom: 0; top: auto; margin-top: 0; }
+
+/* Short landscape screens: logo beside the menu. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .fluid #menu { flex-flow: row wrap; align-content: center; justify-content: center; column-gap: 24px; row-gap: 6px; }
+  .fluid .title-logo { width: min(44vw, 400px); }
+  .fluid .mainnav button { min-height: 44px; font-size: clamp(26px, 7.4vh, 40px); }
+  .fluid .extras, .fluid .fineprint { flex-basis: 100%; justify-content: center; text-align: center; }
+  /* The room screen keeps the original arrangement: characters on the left,
+     the room on the right, everything above the fold. */
+  .fluid #setup { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: 'head head' 'sub sub' 'chars level' 'buttons buttons' 'note note'; justify-items: center; align-items: center; align-content: start; gap: 6px 18px; padding-top: calc(env(safe-area-inset-top) + 10px); }
+  .fluid #setup .objective { grid-area: head; font-size: clamp(24px, 8vh, 40px); white-space: nowrap; }
+  .fluid #setup .objective-sub { grid-area: sub; font-size: 13px; }
+  .fluid #setup .chars { grid-area: chars; flex-direction: column; }
+  .fluid #setup .level { grid-area: level; max-width: calc((100vh - 222px) * 1.923 + 2 * var(--arrow) + 8px); }
+  .fluid #setup .setup-buttons { grid-area: buttons; }
+  .fluid #setup .setup-note { grid-area: note; }
+  .fluid #setup .chars.two .charcard { width: 80px; height: 80px; }
+  .fluid #setup .chars.two .charpick { grid-template-columns: var(--arrow) 80px var(--arrow); }
+}

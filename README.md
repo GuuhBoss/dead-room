@@ -37,6 +37,11 @@ Solo also supports Space and number keys 1–9,0. P2 uses WASD, Space, Q/E.
 P pauses offline games; M toggles sound. The recreation also has
 single-player WASD aliases, gamepad and touch controls.
 
+On phones, portrait play uses a larger game view above a separate control deck;
+landscape fills the screen. Menus reflow and scroll, controls use large touch
+targets, and turning the screen releases held inputs. Fullscreen is available
+where the browser supports it. Desktop retains the original stage layout.
+
 Shared tables now contain eighteen original room symbols, ten weapons and all
 58 upgrade milestones through x125. Unlocks: pistol x1, Uzi x5, shotgun x10,
 barrels x15, grenades x20, fake walls x30, claymore x40, rockets x50, charge packs

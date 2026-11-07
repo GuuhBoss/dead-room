@@ -32,7 +32,10 @@ function rebuildBinds() {
 }
 rebuildBinds();
 const GAME_KEYS = new Set(['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Slash', 'Quote', 'Tab', 'Comma', 'Period']);
-const touch = { on: false, used: false, dx: 0, dy: 0, fire: false, swap: false, tap: false };
+// Touch screens show the on-screen controls from the start; elsewhere they
+// appear after the first touch.
+const touch = { on: false, used: matchMedia('(pointer: coarse)').matches, dx: 0, dy: 0, fire: false, swap: false, tap: false };
+let releaseTouch = () => {};
 const pads = { list: [], prev: new Map() };
 const scripted = [null, null]; // test hook: fixed input per player
 const DIGIT_WEAPON = code => { const m = /^(?:Digit|Numpad)(\d)$/.exec(code); return m ? (Number(m[1]) + 9) % 10 : -1; };
@@ -160,12 +163,13 @@ function togglePause() {
   if (game.state !== 'playing' || overShown) return;
   if (game.online) { net.note('Online games keep running: the server does not pause.'); return; }
   paused = !paused;
-  if (paused) { keys.clear(); sfx.stopAmbience(); fillPause(); screen('pause'); $('touch').hidden = true; }
+  if (paused) { keys.clear(); releaseTouch(); sfx.stopAmbience(); fillPause(); screen('pause'); $('touch').hidden = true; }
   else { hideScreens(); $('touch').hidden = !touch.used; }
 }
 
 function toMenu() {
   net.leave();
+  releaseTouch();
   sfx.stopAmbience();
   game.online = false;
   game.state = 'menu';
@@ -182,6 +186,7 @@ function toMenu() {
 const END_TEXT = ['YOU WERE EATEN!', 'BLED TO DEATH', 'DRAINED OF BLOOD', 'YOUR HEAD WAS RIPPED OFF!', 'DEATH!', 'GAME OVER!', 'WIMPISH!', 'LOSER!'];
 function showOver(rank) {
   overShown = true;
+  releaseTouch();
   sfx.ui('World.End'); // CScreen_Debrief
   game.overAt = performance.now();
   const dm = game.mode === 3, time = `${Math.floor(runTime / 60)}:${pad(runTime % 60, 2)}`;
@@ -293,6 +298,7 @@ function paintHelp() {
 function fitHeadline() {
   const h = $('objective');
   h.style.fontSize = '';
+  if (view.fluid) return; // phones wrap it instead
   const range = document.createRange();
   range.selectNodeContents(h);
   const room = h.getBoundingClientRect().width * 0.97;
@@ -483,47 +489,89 @@ $('over-select').onclick = () => {
 };
 $('sound').onclick = () => { sfx.toggle(); $('sound').textContent = `Sound: ${sfx.enabled ? 'on' : 'off'}`; };
 
-// Touch: a floating stick on the left half, fire and swap on the right.
+// Touch: a floating stick on the left, fire and swap on the right. Every
+// way a touch can end (lifting, cancelling, losing capture, the page losing
+// focus or turning) lets go of the controls, so nothing stays held.
 (function setupTouch() {
-  const zone = $('stickzone'), stick = $('stick'), knob = $('knob');
+  const zone = $('stickzone'), stick = $('stick'), knob = $('knob'), fireBtn = $('t-fire'), swapBtn = $('t-swap');
   let id = null, ox = 0, oy = 0;
+  // Knob travel and dead zone in the zone's own pixels (UI pixels when scaled).
+  const reach = () => (view.fluid ? { max: 46, dead: 12 } : { max: 70, dead: 18 });
+  const scaleOf = () => zone.getBoundingClientRect().width / (zone.offsetWidth || 1);
   addEventListener('pointerdown', e => {
     if (e.pointerType !== 'touch') return;
-    touch.used = true;
+    if (!touch.used) { touch.used = true; resize(); }
     if (game.state === 'playing' && !paused && !overShown) $('touch').hidden = false;
   }, true);
+  function releaseStick() {
+    id = null; touch.dx = touch.dy = 0;
+    stick.hidden = true;
+    knob.style.transform = '';
+    zone.classList.remove('active');
+  }
+  function releaseFire() { touch.fire = false; fireBtn.classList.remove('held'); }
+  releaseTouch = () => { releaseStick(); releaseFire(); touch.swap = touch.tap = false; };
   zone.addEventListener('pointerdown', e => {
+    e.preventDefault();
     id = e.pointerId; ox = e.clientX; oy = e.clientY;
-    zone.setPointerCapture(id);
-    const r = zone.getBoundingClientRect(), k = r.width / zone.offsetWidth;
+    try { zone.setPointerCapture(id); } catch {}
+    const r = zone.getBoundingClientRect(), k = scaleOf();
     stick.style.left = `${(ox - r.left) / k}px`;
     stick.style.top = `${(oy - r.top) / k}px`;
     stick.hidden = false;
+    zone.classList.add('active');
     touch.on = true;
   });
   zone.addEventListener('pointermove', e => {
     if (e.pointerId !== id) return;
-    const k = zone.getBoundingClientRect().width / zone.offsetWidth;
+    const k = scaleOf(), { max, dead } = reach();
     let dx = (e.clientX - ox) / k, dy = (e.clientY - oy) / k;
-    const d = Math.hypot(dx, dy), max = 70;
+    const d = Math.hypot(dx, dy);
     if (d > max) { dx *= max / d; dy *= max / d; }
     knob.style.transform = `translate(${dx}px, ${dy}px)`;
-    if (d < 18) { touch.dx = touch.dy = 0; return; }
+    if (d < dead) { touch.dx = touch.dy = 0; return; }
     const a = Math.round(Math.atan2(dy, dx) / OCT) * OCT;
     touch.dx = Math.round(Math.cos(a)); touch.dy = Math.round(Math.sin(a));
   });
-  const release = e => {
-    if (e.pointerId !== id) return;
-    id = null; touch.dx = touch.dy = 0; stick.hidden = true;
-    knob.style.transform = '';
-  };
-  zone.addEventListener('pointerup', release);
-  zone.addEventListener('pointercancel', release);
-  const fireBtn = $('t-fire');
-  fireBtn.addEventListener('pointerdown', e => { e.preventDefault(); touch.on = true; touch.fire = true; touch.tap = true; fireBtn.setPointerCapture(e.pointerId); });
-  for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) fireBtn.addEventListener(ev, () => { touch.fire = false; });
-  $('t-swap').addEventListener('pointerdown', e => { e.preventDefault(); touch.on = true; touch.swap = true; });
+  for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) zone.addEventListener(ev, e => { if (e.pointerId === id) releaseStick(); });
+  fireBtn.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    touch.on = true; touch.fire = true; touch.tap = true;
+    fireBtn.classList.add('held');
+    try { fireBtn.setPointerCapture(e.pointerId); } catch {}
+  });
+  for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) fireBtn.addEventListener(ev, releaseFire);
+  swapBtn.addEventListener('pointerdown', e => { e.preventDefault(); touch.on = true; touch.swap = true; });
   $('t-pause').addEventListener('click', togglePause);
+  // No long-press menus or text selection on the controls.
+  $('touch').addEventListener('contextmenu', e => e.preventDefault());
+  addEventListener('blur', releaseTouch);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) releaseTouch(); });
+  const turned = () => { releaseTouch(); resize(); };
+  addEventListener('orientationchange', turned);
+  if (screen.orientation) screen.orientation.addEventListener('change', turned);
+  if (window.visualViewport) visualViewport.addEventListener('resize', resize);
+})();
+
+// On a phone the soft keyboard can cover a field: bring the focused one back
+// into view once the keyboard has opened.
+document.addEventListener('focusin', e => {
+  if (!view.fluid || !e.target.matches('input, select')) return;
+  setTimeout(() => e.target.scrollIntoView({ block: 'center', behavior: 'smooth' }), 300);
+});
+
+// Full screen, offered on phones when the browser allows it.
+(function setupFullscreen() {
+  const btn = $('fullscreen');
+  const can = !!(document.fullscreenEnabled && document.documentElement.requestFullscreen);
+  const sync = () => { btn.hidden = !can || !!document.fullscreenElement; }; // CSS shows it on phones only
+  btn.onclick = () => {
+    sfx.ui('CLICK');
+    document.documentElement.requestFullscreen({ navigationUI: 'hide' }).catch(() => {});
+  };
+  document.addEventListener('fullscreenchange', () => { sync(); resize(); });
+  addEventListener('resize', sync);
+  sync();
 })();
 
 // ─── Main loop ──────────────────────────────────────────────────────────────

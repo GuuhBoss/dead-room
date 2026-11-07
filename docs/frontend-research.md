@@ -404,6 +404,21 @@ on the frontend:
   scores go to this project's server leaderboard.
 - Extras that change no rules: single-player WASD/Q/E with default keys, gamepads,
   touch controls, Esc to pause, offline best scores per device, sound on/off.
+- Phones and small windows (viewport under 640 × 480, or a touch screen under
+  600 px on its short side) get a presentation of their own; desktop keeps the
+  original 640 × 480 stage. The game fills the screen at a zoom that keeps about
+  the original 20 × 15 cells' area in view, shaped to the screen (about 14 × 21
+  cells in portrait, 25 × 12 in landscape; at least 0.72 while 12 cells fit
+  across, never fewer than 10), with no stretching. Portrait touch screens keep
+  a control deck under the game (stick on the left, Fire and Swap on the right);
+  landscape lays the controls over the game's corners; both keep clear of the
+  safe areas. Death match views stack in portrait and sit side by side in
+  landscape. Menus become scrolling columns with 44 px targets instead of a
+  scaled 1280 × 960 page; the landscape room screen keeps the original
+  characters-left, room-right arrangement. Touch controls let go when lifted,
+  cancelled, when the page loses focus or is hidden, and when the screen turns.
+  A Full screen button appears on phones whose browser supports it. The
+  simulation never reads the view, so rules and online play are unchanged.
 
 ## Shared simulation notes for the backend
 
