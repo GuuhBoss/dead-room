@@ -4,6 +4,12 @@
 // update() for an online game and never reports a score.
 const NAME_RE = /^[\p{L}\p{N} ._'\-]+$/u;
 const cleanName = s => s.normalize('NFKC').trim().replace(/ +/g, ' ');
+const listNames = names => (Intl.ListFormat ? new Intl.ListFormat('en', { type: 'conjunction' }).format(names) : names.join(', '));
+
+// Online parties have up to six slots but only the original four characters,
+// so every slot also has a number, a colour and its player's name.
+const SLOT_COLORS = ['#ff4b3e', '#3d9bff', '#4cd94c', '#ffd23f', '#c86bff', '#ff9a3c'];
+const slotName = id => net.lobby?.players.find(p => p.id === id)?.name || `Player ${id + 1}`;
 
 const net = {
   ws: null, phase: 'idle', me: null, lobby: null, seq: 0, sendIn: 0, pingIn: 0, rtt: 0,
@@ -34,8 +40,14 @@ const net = {
       const name = this.name();
       if (!name) return;
       const picked = new FormData($('net-create')).get('net-mode'), mode = ['coop', 'deathmatch'].includes(picked) ? picked : 'solo';
-      this.request({ type: 'create', name, roomIndex: +$('net-room').value, mode });
+      const create = { type: 'create', name, roomIndex: +$('net-room').value, mode };
+      if (mode !== 'solo') create.maxPlayers = clamp(+$('net-capacity').value || 6, 2, 6);
+      this.request(create);
     };
+    // Room size: up to six players, chosen for co-op and death match only.
+    const syncCapacity = () => { $('net-capacity-row').hidden = new FormData($('net-create')).get('net-mode') === 'solo'; };
+    document.querySelectorAll('input[name="net-mode"]').forEach(r => { r.addEventListener('change', syncCapacity); });
+    syncCapacity();
     $('net-join').onsubmit = e => {
       e.preventDefault();
       const name = this.name(), code = $('net-code').value.trim().toUpperCase();
@@ -123,12 +135,17 @@ const net = {
     $('net-entry').hidden = true; $('net-lobby').hidden = false; $('net-back-row').hidden = true;
     $('lobby-code').textContent = l.code;
     $('lobby-room').textContent = `${l.roomIndex + 1}. ${ROOMS[l.roomIndex].name}`;
-    $('lobby-mode').textContent = { solo: 'Single play', coop: 'Cooperative, two players', deathmatch: 'Death match, two players, first to 10' }[l.mode] || l.mode;
+    const max = l.maxPlayers || (l.mode === 'solo' ? 1 : 2), n = l.players.length;
+    $('lobby-mode').textContent = l.mode === 'solo' ? 'Single play'
+      : l.mode === 'coop' ? `Cooperative, ${n} of ${max} players`
+        : `Death match, ${n} of ${max} players, ${n > 2 ? 'first to 10 kills' : n === 2 ? 'first to 10: the original duel' : 'first to 10'}`;
     $('net-view').hidden = l.mode === 'solo';
     this.setView(this.view);
     // Each player picks their own character ({type:'character'}); the server
     // keeps the choice and the game uses it.
-    $('lobby-players').innerHTML = l.players.map(p => `<li>${cardHTML(p.id, p.id === me.playerId, `${p.name}'s character`)}<div>${escapeHtml(p.name)} <span>player ${p.id + 1}${p.id === l.hostId ? ', host' : ''}${p.id === me.playerId ? ', you' : ''}</span></div></li>`).join('');
+    $('lobby-players').classList.toggle('party', max > 2);
+    $('lobby-players').innerHTML = l.players.map(p => `<li style="--slot:${SLOT_COLORS[p.id] || '#999'}">${cardHTML(p.id, p.id === me.playerId, `${p.name}'s character`)}<div><b class="slot">P${p.id + 1}</b> ${escapeHtml(p.name)} <span>${p.id === l.hostId ? 'host' : ''}${p.id === l.hostId && p.id === me.playerId ? ', ' : ''}${p.id === me.playerId ? 'you' : ''}</span></div></li>`).join('')
+      + Array.from({ length: Math.max(0, max - n) }, (_, i) => `<li class="open-slot" aria-label="Open slot"><div><b class="slot">P${n + i + 1}</b> Open</div></li>`).join('');
     l.players.forEach((p, i) => paintCard(document.querySelectorAll('#lobby-players .charcard')[i], Number.isInteger(p.character) ? p.character : 0));
     document.querySelectorAll('#lobby-players .arrow').forEach(b => {
       b.onclick = () => {
@@ -139,11 +156,13 @@ const net = {
         this.send({ type: 'character', character: next });
       };
     });
-    const ready = l.mode === 'solo' || l.players.length === 2;
+    // The host may start with two or more; nobody joins once it has started.
+    const ready = l.mode === 'solo' || n >= 2;
     $('net-start').hidden = !me.host;
     $('net-start').disabled = !ready;
+    $('net-start').textContent = l.mode === 'solo' ? 'Start' : `Start (${n})`;
     $('lobby-hint').textContent = me.host
-      ? (ready ? 'Start when you are ready.' : 'Waiting for a second player: share the room code.')
+      ? (!ready ? 'Waiting for a second player: share the room code.' : n < max ? `Start when you are ready, or wait: ${max - n} more can join with the code.` : 'The room is full. Start when you are ready.')
       : 'Waiting for the host to start.';
   },
 
@@ -216,6 +235,7 @@ const net = {
     if (b.game.options) game.options = b.game.options;
     if (b.game.characters) game.characters = b.game.characters;
     if (b.game.fragLimit) game.fragLimit = b.game.fragLimit;
+    game.playerCount = Number.isInteger(b.game.playerCount) ? b.game.playerCount : b.players.length;
     game.winner = b.game.winner ?? null;
     game.state = b.game.state;
   },
@@ -246,12 +266,14 @@ const net = {
   showRematch() {
     const el = $('rematch-status'), again = $('again');
     if (!el || !game.online) return;
-    const others = (this.lobby?.players || []).filter(p => p.id !== this.me?.playerId);
+    const all = this.lobby?.players || [], others = all.filter(p => p.id !== this.me?.playerId);
+    const waiting = others.filter(p => !this.rematchReady.includes(p.id)), keen = others.filter(p => this.rematchReady.includes(p.id));
+    const votes = this.rematchReady.length + (this.rematchAsked && !this.rematchReady.includes(this.me?.playerId) ? 1 : 0);
     let text = '';
     if (this.roomGone) text = `${this.roomGone} Playing again is no longer possible.`;
-    else if (this.rematchAsked) text = others.length ? `Waiting for ${others.map(p => p.name).join(' and ')} to accept…` : 'Starting…';
-    else if (others.some(p => this.rematchReady.includes(p.id))) text = `${others.filter(p => this.rematchReady.includes(p.id)).map(p => p.name).join(' and ')} wants to play again.`;
-    else if (others.length) text = `${again.textContent} asks everyone; the game restarts when all accept.`;
+    else if (this.rematchAsked) text = waiting.length ? `${all.length > 2 ? `${votes} of ${all.length} ready. ` : ''}Waiting for ${listNames(waiting.map(p => p.name))} to accept…` : 'Starting…';
+    else if (keen.length) text = `${listNames(keen.map(p => p.name))} ${keen.length > 1 ? 'want' : 'wants'} to play again${all.length > 2 ? ` (${keen.length} of ${all.length})` : ''}.`;
+    else if (others.length) text = `${again.textContent} asks everyone; the game restarts when all ${all.length > 2 ? all.length + ' ' : ''}accept.`;
     el.textContent = text;
     el.hidden = !text;
     again.disabled = !!this.roomGone || this.rematchAsked;
@@ -262,7 +284,7 @@ const net = {
     this.rematchReady = []; this.rematchAsked = false;
     if (game.mode === 3) {
       // Death match has a winner and no survival ranking (result.recorded is false by design).
-      showOver(`Decided by the server: first to ${game.fragLimit}. Death match games are not ranked.`);
+      showOver(`Decided by the server: first to ${game.fragLimit}${players.length > 2 ? ' kills' : ''}. Death match games are not ranked.`);
       this.phase = 'over';
       this.showRematch();
       return;
@@ -272,7 +294,7 @@ const net = {
     const runId = this.me?.runId;
     if (this.result?.recorded === false) $('over-rank').textContent = 'Run completed, but leaderboard storage was unavailable. This run was not recorded.';
     else if (!this.result?.recorded) $('over-rank').textContent = 'Run completed. The server has not confirmed leaderboard recording.';
-    else board.confirm(game.roomIndex, mode, runId).then(text => { if (overShown && this.me?.runId === runId) $('over-rank').textContent = text; });
+    else board.confirm(game.roomIndex, mode, runId, players.length).then(text => { if (overShown && this.me?.runId === runId) $('over-rank').textContent = text; });
     this.phase = 'over';
     this.showRematch();
   },
@@ -307,12 +329,14 @@ const net = {
 };
 
 // ─── Global leaderboard ─────────────────────────────────────────────────────
+// Each team size has its own table (players = actual team size).
 const board = {
-  room: 0, mode: 'solo', bound: false, mine: null,
+  room: 0, mode: 'solo', size: 2, bound: false, mine: null,
 
-  open(roomIndex, mode) {
+  open(roomIndex, mode, size) {
     if (!this.bound) this.bind();
     this.room = roomIndex; this.mode = mode;
+    if (mode === 'coop' && size >= 2 && size <= 6) this.size = size;
     document.querySelector(`input[name="board-mode"][value="${mode}"]`).checked = true;
     this.load();
   },
@@ -322,40 +346,47 @@ const board = {
     $('board-prev').onclick = () => { this.room = (this.room + ROOMS.length - 1) % ROOMS.length; this.load(); };
     $('board-next').onclick = () => { this.room = (this.room + 1) % ROOMS.length; this.load(); };
     document.querySelectorAll('input[name="board-mode"]').forEach(r => { r.onchange = () => { this.mode = r.value; this.load(); }; });
+    document.querySelectorAll('#board-size button').forEach(b => { b.onclick = () => { this.size = +b.dataset.size; sfx.ui('CLICK'); this.load(); }; });
   },
 
-  async fetch(roomIndex, mode) {
+  players() { return this.mode === 'solo' ? 1 : this.size; },
+
+  async fetch(roomIndex, mode, size) {
     if (location.protocol === 'file:') throw new Error('The leaderboard needs the game served by its own server (pnpm start).');
-    const res = await fetch(`/api/leaderboard?roomIndex=${roomIndex}&mode=${mode}`, { cache: 'no-store' });
+    const res = await fetch(`/api/leaderboard?roomIndex=${roomIndex}&mode=${mode}${size ? `&players=${size}` : ''}`, { cache: 'no-store' });
     if (!res.ok) throw new Error(`The server answered ${res.status}.`);
     const data = await res.json();
     return Array.isArray(data.entries) ? data.entries : [];
   },
 
   async load() {
-    const room = this.room, mode = this.mode;
+    const room = this.room, mode = this.mode, size = this.players();
     $('board-room').textContent = `${room + 1}. ${ROOMS[room].name}`;
+    $('board-size').hidden = mode !== 'coop';
+    document.querySelectorAll('#board-size button').forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.size === this.size)));
     $('board-status').textContent = 'Loading…';
     $('board-body').innerHTML = '';
+    const current = () => room === this.room && mode === this.mode && size === this.players();
     try {
-      const entries = await this.fetch(room, mode);
-      if (room !== this.room || mode !== this.mode) return;
+      const entries = await this.fetch(room, mode, size);
+      if (!current()) return;
       const time = s => `${Math.floor(s / 60)}:${pad(s % 60, 2)}`;
       $('board-body').innerHTML = entries.map((e, i) => `<tr class="${e.id === this.mine ? 'mine' : ''}"><td>${i + 1}</td><td>${escapeHtml(e.names.join(' & '))}</td><td>${Number(e.score).toLocaleString()}</td><td>${e.kills}</td><td>${e.level}</td><td>x${e.bestMultiplier}</td><td>${time(e.duration)}</td><td>${escapeHtml(new Date(e.createdAt).toLocaleDateString())}</td></tr>`).join('');
-      $('board-status').textContent = entries.length ? '' : 'No online games recorded for this room yet. Host one from Play online.';
+      $('board-status').textContent = entries.length ? '' : `No online ${mode === 'coop' ? `${size}-player co-op` : 'solo'} games recorded for this room yet. Host one from Play online.`;
       $('board-status').classList.toggle('ok', !entries.length);
     } catch (err) {
-      if (room === this.room && mode === this.mode) $('board-status').textContent = err.message;
+      if (current()) $('board-status').textContent = err.message;
     }
   },
 
-  // After an online game: find the server's own record of it, if any.
-  async confirm(roomIndex, mode, runId) {
+  // After an online game: find the server's own record of it, if any, in the
+  // table for the run's actual team size.
+  async confirm(roomIndex, mode, runId, size = mode === 'solo' ? 1 : 2) {
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        const entries = await this.fetch(roomIndex, mode);
+        const entries = await this.fetch(roomIndex, mode, size);
         const at = entries.findIndex(e => e.id === runId);
-        if (at >= 0) { this.mine = entries[at].id; return `Recorded by the server: #${at + 1} on the ${ROOMS[roomIndex].name} ${mode === 'coop' ? 'co-op' : 'solo'} leaderboard.`; }
+        if (at >= 0) { this.mine = entries[at].id; return `Recorded by the server: #${at + 1} on the ${ROOMS[roomIndex].name} ${mode === 'coop' ? `${size}-player co-op` : 'solo'} leaderboard.`; }
       } catch (err) { return `Scored by the server, but the leaderboard could not be read: ${err.message}`; }
       await new Promise(r => setTimeout(r, 700));
     }

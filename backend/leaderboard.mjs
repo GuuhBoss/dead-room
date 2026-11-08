@@ -3,13 +3,14 @@ import { resolve, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { playerName } from './protocol.mjs';
 
-const LIMIT = 50, MAX_FILE = 1024 * 1024;
+//18 maps × (solo + five cooperative team sizes) ×50 =5400 records.
+const LIMIT = 50, MAX_ENTRIES = 6000, MAX_FILE = 8 * 1024 * 1024;
 const integer = (v, min = 0) => Number.isSafeInteger(v) && v >= min;
 const compare = (a, b) => b.score - a.score || b.kills - a.kills || a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id);
 function cleanEntry(entry) {
   if (!entry || typeof entry !== 'object' || !/^[a-f0-9-]{36}$/.test(entry.id)
     || !['solo', 'coop'].includes(entry.mode) || !integer(entry.roomIndex) || entry.roomIndex > 255
-    || !Array.isArray(entry.names) || entry.names.length !== (entry.mode === 'solo' ? 1 : 2)
+    || !Array.isArray(entry.names) || (entry.mode === 'solo' ? entry.names.length !== 1 : entry.names.length < 2 || entry.names.length > 6)
     || !entry.names.every(name => playerName(name) === name)
     || !['score', 'kills', 'level', 'bestMultiplier'].every(key => integer(entry[key], key === 'level' || key === 'bestMultiplier' ? 1 : 0))
     || !Number.isFinite(entry.duration) || entry.duration <= 0 || entry.duration > 6 * 60 * 60
@@ -19,11 +20,11 @@ function cleanEntry(entry) {
 function bounded(entries) {
   const counts = new Map(), ids = new Set();
   return entries.sort(compare).filter(entry => {
-    const key = `${entry.roomIndex}:${entry.mode}`, count = counts.get(key) || 0;
+    const key = `${entry.roomIndex}:${entry.mode}:${entry.names.length}`, count = counts.get(key) || 0;
     if (count >= LIMIT || ids.has(entry.id)) return false;
     ids.add(entry.id); counts.set(key, count + 1);
     return true;
-  }).slice(0, 1000);
+  }).slice(0, MAX_ENTRIES);
 }
 
 export class Leaderboard {
@@ -45,8 +46,8 @@ export class Leaderboard {
       }
     }
   }
-  list({ roomIndex, mode } = {}) {
-    return this.entries.filter(entry => (roomIndex === undefined || entry.roomIndex === roomIndex) && (mode === undefined || entry.mode === mode)).slice(0, LIMIT).map(entry => ({ ...entry, names: [...entry.names] }));
+  list({ roomIndex, mode, players } = {}) {
+    return this.entries.filter(entry => (roomIndex === undefined || entry.roomIndex === roomIndex) && (mode === undefined || entry.mode === mode) && (players === undefined || entry.names.length === players)).slice(0, LIMIT).map(entry => ({ ...entry, names: [...entry.names] }));
   }
   record(entry) {
     const cleaned = cleanEntry(entry);

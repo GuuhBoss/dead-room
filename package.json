@@ -2,7 +2,7 @@
   "name": "dead-rooms",
   "version": "1.0.0",
   "private": true,
-  "description": "Zombie survival for one or two players, a Boxhead: 2Play Rooms tribute",
+  "description": "Boxhead: 2Play Rooms recreation with online survival and deathmatch for up to six players",
   "type": "module",
   "scripts": {
     "build": "node build.mjs",

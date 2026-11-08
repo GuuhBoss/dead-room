@@ -182,3 +182,56 @@ The live3330 process was restarted to load the rematch handler. The parent
 verified HTTP200 over the LAN and the new protocol's rejection of a rematch
 without a completed room. The camera preference is client presentation only;
 original cooperative distance limits and authoritative gameplay are unchanged.
+
+## User-requested online parties of up to six
+
+The user requested up to six players. Backend support now covers online co-op
+and free-for-all deathmatch, with capacity 2–6 and actual membership fixed at
+start. Original local multiplayer and two-player online rules remain intact.
+Three-or-more-player deathmatch is a deliberate extension: first to10 credited
+opponent kills, without credit for self/environment deaths. Larger cooperative
+teams apply the original pairwise leash and revive near a living partner.
+
+All 79 automated tests pass. Added checks exercise six-player free-floor spawns
+in all18 maps in both modes, sixth-slot input/character isolation, seventh-member
+rejection, invalid capacities, starting below capacity without ghost slots,
+departure aborts, all-six rematch unanimity with fresh ranked UUIDs, larger-team
+respawn and a slot5 deathmatch winner without survival ranking. Board filters
+and persistence separate actual team sizes while retaining old records. An
+additional ownership check covers explosive projectile, placed barrel, map
+barrel and chain-reaction kills without granting frags to another player.
+
+The same Opus frontend agent completed six-player UI after its usage reset.
+Parent independently checked six real Chromium contexts, including320×568 and
+844×390 phones: six lobby cards with arrows only on the assigned slot, character
+isolation, all-slot state/count hydration, sixth-slot simultaneous touch movement
+and fire observed by the host, own-camera following, one shared party camera and
+disconnect-unranked behavior. Starting local deathmatch after online six-player
+play restored two players and the original split view.
+
+Separate server-side fixtures exercised genuine damage and completion while
+shortening the death animation: all six clients showed a slot5 free-for-all
+winner, all six co-op clients confirmed the exact run UUID in their6-player
+table, and both modes required all six rematch votes. The new run UUID matched
+on all clients; rematches preserved six slots. The phone board selected Team6,
+highlighted the exact run and kept Team2 empty. Deathmatch never entered the
+survival board. No browser page errors occurred. One parent script initially
+used an incorrect offline navigation path; correcting that script required no
+game change.
+
+Parent found a presentation gap with wide24-character names overlapping the
+free-for-all kill count. The same frontend owner fixed it using actual HUD-font
+width measurements, preserving the P# prefix and own-player marker. Parent then
+checked six rendered online rows and wide Latin, CJK, Hangul, Arabic, Greek and
+accented samples: every label fit136 pixels with a clear gap before kill counts.
+Phone and desktop rendering passed the frontend owner's targeted checks. Tags
+above nearby players can still overlap spatially. A natural six-human match
+through10 kills and physical phone/Safari testing have not been observed. This
+user-requested extension adds no claim of original-game parity.
+
+On8 November2026 the parent restarted the live3330 process with the integrated
+build. HTTP200 over http://192.168.1.29:3330 and six actual LAN WebSocket clients
+confirmed capacity6, unique slots, sixth-slot character application, snapshots
+with six players, seventh-member rejection and all-member departure cleanup.
+The aborted smoke run was not ranked. Build, bundle syntax and whitespace
+checks pass; the server listens on0.0.0.0:3330.

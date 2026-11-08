@@ -6,8 +6,8 @@ additions. Original-version art, fonts and sound are bundled; ads and
 publisher/developer branding are omitted.
 
 Single player, local cooperative play and split-screen deathmatch are
-implemented, along with online solo/co-op/deathmatch and persistent survival
-rankings. The server controls combat, unlocks and scores; clients send inputs.
+implemented, along with online solo, 2–6-player co-op/deathmatch and persistent
+survival rankings. The server controls combat, unlocks and scores; clients send inputs.
 Original room geometry and progression were independently checked against the
 publisher's binary. Original assets now drive the renderer and audio. Remaining
 presentation differences and limits of the comparison are recorded below;
@@ -51,13 +51,17 @@ higher multipliers. Normal speed runs 25 original logic ticks per second.
 The server consumes bounded input messages over WebSocket `/online`, runs the
 same shared simulation, and records actual completed survival runs. Clients
 cannot submit a score. GET `/api/leaderboard` provides filtered persistent
-rankings; online solo and co-op are separate categories. Offline games are
-unranked. Online deathmatch defaults to ten frags, matching the original;
-offline options allow 5/10/20/50. Deathmatch results stay out of survival rankings.
+rankings; online solo and each co-op team size have separate categories.
+Offline games are unranked. Online two-player deathmatch retains the original
+ten-death duel; with 3–6 players it is first to ten attributed opponent kills.
+Offline options allow 5/10/20/50. Deathmatch results stay out of survival rankings.
+To play online, create a co-op or deathmatch room, choose a capacity of 2–6,
+and share its code. The host can start once at least two players have joined;
+only the connected players enter the game. New players cannot join after start.
 After an online game, Retry / Replay asks everyone in the room to play again;
 when all accept, the same room restarts as a new run. In the lobby each player
-chooses a shared view (one camera, split screen in death match, as on one
-computer) or their own view (the camera follows only them); V switches it
+chooses a shared view (one party camera; two-player deathmatch uses split screen)
+or their own view (the camera follows only them); V switches it
 during play unless V is assigned to one of your controls. See the
 [protocol](docs/online-contract.md).
 
@@ -67,8 +71,9 @@ during play unless V is assigned to one of your controls. See the
 publisher binary URL/hash, extracted rules, independent progression comparison,
 browser checks and remaining differences. [Acceptance checklist](docs/fidelity-validation.md)
 tracks the orchestrator's validation. No later Boxhead game's content is intended.
-All65 automated tests currently pass. Independent Chromium checks cover local
-deathmatch, two-client co-op/deathmatch, aborts and exact-ID survival ranking.
+All 79 automated tests currently pass. Independent Chromium checks cover local
+deathmatch, two-client co-op/deathmatch, six-client rooms and touch controls,
+all-member rematches, aborts and exact-ID survival ranking by team size.
 Original fonts,29 sprite strips,26 sound samples and18 room definitions load;
 the standalone HTML plays with no HTTP requests. The original logo, menu
 backdrops and four instruction sections are included. Every room's floor,

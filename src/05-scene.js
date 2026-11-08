@@ -80,7 +80,13 @@ function updateCamera(dt, jump) {
   const list = mine ? [mine] : players.filter(p => !p.down && p.state !== 'respawn');
   const src = list.length ? list : players;
   if (!src.length || !room) return;
-  const tx = src.reduce((s, p) => s + p.x, 0) / src.length, ty = src.reduce((s, p) => s + p.y, 0) / src.length;
+  // Two players: their mean, as CWorld.Process_Tracking. A larger online
+  // party shares one camera centred on the box around everyone standing.
+  let tx = src.reduce((s, p) => s + p.x, 0) / src.length, ty = src.reduce((s, p) => s + p.y, 0) / src.length;
+  if (src.length > 2) {
+    const xs = src.map(p => p.x), ys = src.map(p => p.y);
+    tx = (Math.min(...xs) + Math.max(...xs)) / 2; ty = (Math.min(...ys) + Math.max(...ys)) / 2;
+  }
   if (cam.tx === null || jump) { cam.tx = tx; cam.ty = ty; }
   else {
     const d = Math.hypot(tx - cam.tx, ty - cam.ty), base = 0.16;

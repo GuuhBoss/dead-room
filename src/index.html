@@ -159,6 +159,11 @@
                 <label><input type="radio" name="net-mode" value="coop"> Cooperative</label>
                 <label><input type="radio" name="net-mode" value="deathmatch"> Death match</label>
               </fieldset>
+              <label class="field" id="net-capacity-row">Players (up to)
+                <select id="net-capacity">
+                  <option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6" selected>6</option>
+                </select>
+              </label>
               <button class="pill" type="submit">Create</button>
             </form>
             <form id="net-join" class="card">
@@ -175,7 +180,7 @@
           <fieldset class="seg view-choice" id="net-view"><legend>Screen</legend>
             <label><input type="radio" name="net-view" value="shared" checked> Shared view</label>
             <label><input type="radio" name="net-view" value="own"> Own view</label>
-            <small>Shared: one camera for both players, as on one computer (split screen in death match). Own: your camera follows only you. Each player chooses; V switches during play unless V is one of your controls.</small>
+            <small>Shared: one camera for everyone, as on one computer (a two-player death match splits the screen). Own: your camera follows only you. Each player chooses; V switches during play unless V is one of your controls.</small>
           </fieldset>
           <p id="lobby-hint" class="muted"></p>
           <div class="row-end">
@@ -200,6 +205,9 @@
           <label><input type="radio" name="board-mode" value="solo" checked> Single play</label>
           <label><input type="radio" name="board-mode" value="coop"> Cooperative</label>
         </fieldset>
+        <div class="board-size" id="board-size" role="group" aria-label="Team size" hidden>
+          <span>Team</span><button type="button" data-size="2">2</button><button type="button" data-size="3">3</button><button type="button" data-size="4">4</button><button type="button" data-size="5">5</button><button type="button" data-size="6">6</button>
+        </div>
       </div>
       <div class="table-wrap"><table class="scores"><thead><tr><th>#</th><th>Players</th><th>Score</th><th>Kills</th><th>Level</th><th>Best</th><th>Time</th><th>Date</th></tr></thead><tbody id="board-body"></tbody></table></div>
       <p id="board-status" class="status" role="status" aria-live="polite"></p>

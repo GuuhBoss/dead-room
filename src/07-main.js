@@ -139,6 +139,9 @@ function startLocal() {
   game.online = false;
   game.demo = false;
   game.state = 'playing';
+  // Offline play is the original one or two players, whatever the last online
+  // party was (the shared startRun reads this count).
+  game.playerCount = menu.mode === 1 ? 1 : 2;
   paused = false; overShown = false;
   keys.clear();
   resetRun(menu.mode, menu.room);
@@ -194,10 +197,16 @@ function showOver(rank) {
   $('over-title').classList.toggle('winner', dm);
   $('over-title').textContent = dm ? (game.winner === null ? 'No winner' : `Player ${game.winner + 1} wins`) : pad(score, 12);
   const room = `${game.roomIndex + 1}. ${ROOMS[game.roomIndex].name}`;
-  const rows = dm
-    ? [['Player 1 frags', players[1] ? players[1].deaths : 0], ['Player 2 frags', players[0] ? players[0].deaths : 0], ['First to', game.fragLimit], ['Room', room], ['Time', time]]
-    : [['Level', level], ['Kills', kills], ['Best multiplier', `x${combo.best}`], ['Room', room], ['Time', time]];
-  $('stats').innerHTML = rows.map(([k, v]) => `<div><dt>${k}</dt><dd>${escapeHtml(String(v))}</dd></div>`).join('');
+  // Two players: frags are the opponent's deaths (the original duel). Larger
+  // online parties: each player's own attributed kills, by slot and name.
+  const party = dm && players.length > 2;
+  const rows = party
+    ? [...players.map(p => [`P${p.id + 1} ${slotName(p.id)}`, p.frags ?? 0]), ['First to', game.fragLimit], ['Room', room], ['Time', time]]
+    : dm
+      ? [['Player 1 frags', players[1] ? players[1].deaths : 0], ['Player 2 frags', players[0] ? players[0].deaths : 0], ['First to', game.fragLimit], ['Room', room], ['Time', time]]
+      : [['Level', level], ['Kills', kills], ['Best multiplier', `x${combo.best}`], ['Room', room], ['Time', time], ...(players.length > 2 ? [['Team', `${players.length} players`]] : [])];
+  $('stats').innerHTML = rows.map(([k, v]) => `<div><dt>${escapeHtml(k)}</dt><dd>${escapeHtml(String(v))}</dd></div>`).join('');
+  if (party && game.winner !== null && game.online) $('over-title').textContent = `Player ${game.winner + 1} wins: ${slotName(game.winner)}`;
   $('over-rank').textContent = rank;
   // Online, Retry / Replay asks everyone in the room to play again.
   $('again').hidden = false;
@@ -489,7 +498,7 @@ const again = () => (game.online ? net.requestRematch() : startLocal());
 $('again').onclick = again;
 $('tomenu').onclick = toMenu;
 $('swap-views').onclick = () => { swapViews(); if (document.activeElement) document.activeElement.blur(); };
-$('over-board').onclick = () => { const r = game.roomIndex, m = game.mode === 2 ? 'coop' : 'solo'; toMenu(); board.open(r, m); screen('board'); };
+$('over-board').onclick = () => { const r = game.roomIndex, m = game.mode === 2 ? 'coop' : 'solo', n = players.length; toMenu(); board.open(r, m, n); screen('board'); };
 $('over-select').onclick = () => {
   const online = game.online, mode = game.mode;
   toMenu();

@@ -546,12 +546,24 @@ were no page errors. These checks do not replace side-by-side original play.
 
 Backend now accepts lobby-only `{type:'character',character:0..3}`, assigned to
 the sending socket's own slot. Lobby players include character; snapshots carry
-the selected game.characters and player.look. Frontend wiring remains pending.
+the selected game.characters and player.look. Frontend wiring was completed
+and independently validated on7 November2026.
 Fixed default game options still apply online.
 
-Gun/devil-hand offsets remain approximate until XSI attachment data is decoded.
-The same frontend agent retains the unfinished original art/font/audio and UI
-fidelity work. Its latest continuation hit a provider usage limit before edits;
-one-time resume is scheduled for00:31 Lisbon,7 November2026. Original assets
-were not prohibited by the user; the earlier substitute-only restriction was
-self-imposed and has been removed (ads/company/developer branding still omitted).
+The subsequent7 November integration replaced guessed attachment offsets with
+decoded XSI data and completed original art/font/audio and menu integration.
+See fidelity-validation.md for the final evidence and remaining comparison
+limits. Ads/company/developer branding remain omitted as requested.
+
+## Online party extension (8 November 2026)
+
+The user requested up to six online players after the original two-player
+implementation. Online co-op and deathmatch now support capacities 2–6 while
+local play stays at one/two. Larger deathmatches use attributed opponent kills;
+the original two-player duel retains its death-limit rule. The lobby shows all
+slots, each client controls its assigned player, shared/own cameras support all
+slots, rematches need every vote, and co-op boards separate actual team sizes.
+Slot/name labels distinguish six players sharing four original character designs.
+Wide-name HUD labels are measured and truncated before the kill column.
+This is a deliberate multiplayer extension, not an original-game fidelity claim.
+See fidelity-validation.md for parent six-browser and live-LAN checks.

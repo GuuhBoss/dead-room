@@ -13,6 +13,7 @@ function drawHud() {
 // Hud_PlayerFrags: "Player N" and that player's deaths (PadFrags) above each
 // view; the names swap with the views (mViewSide_DeathMatch).
 function drawFrags() {
+  if (players.length > 2) { drawPartyFrags(); return; }
   // One view (online "own view"): player 1 on the left, player 2 on the right,
   // clear of the phone's pause button.
   const split = splitMode(), panels = split ? [9.9, 513.65] : [9.9, view.w - 126.35 - (view.fluid ? 60 / view.z : 0)], rects = splitRects();
@@ -23,6 +24,37 @@ function drawFrags() {
     hudText(`Player ${i + 1}`, x + 1.05, y, 21.4, 'left');
     hudText(pad(p.deaths || 0, 2), x + 87.4, y, 21.4, 'left');
   });
+}
+
+// Online parties of three to six: everyone's attributed kills, one line per
+// slot in its colour, this player marked, the leader first.
+// Label column, then the kills, with a clear gap (both carry a 2 px outline).
+const PARTY_FRAGS = { x: 8, counter: 150, gap: 10, size: 14.2 };
+function drawPartyFrags() {
+  const me = net.me?.playerId, rows = players.slice().sort((a, b) => (b.frags ?? 0) - (a.frags ?? 0) || a.id - b.id);
+  const { x, counter, gap, size } = PARTY_FRAGS, top = 16, line = 17;
+  hudText(`First to ${game.fragLimit} kills`, x, top, 13, 'left', '#ffffff');
+  rows.forEach((p, i) => {
+    const y = top + line * (i + 1) + 2;
+    hudText(fitLabel(`P${p.id + 1} `, slotName(p.id), p.id === me ? ' (you)' : '', size, counter - gap - 4), x, y, size, 'left', SLOT_COLORS[p.id] || '#fff');
+    hudText(pad(p.frags ?? 0, 2), x + counter, y, size, 'left', '#ffffff');
+  });
+}
+
+// prefix + name + suffix, the name cut with an ellipsis until the whole label,
+// measured in the HUD's bold font at this size, is no wider than max pixels.
+function fitLabel(prefix, name, suffix, size, max) {
+  ctx.save();
+  ctx.font = `700 ${size}px ${HUD_FONT}`;
+  ctx.letterSpacing = '0px';
+  const width = t => ctx.measureText(t).width, chars = [...name];
+  let text = prefix + name + suffix;
+  if (width(text) > max) {
+    let n = chars.length;
+    do text = prefix + chars.slice(0, --n).join('') + '…' + suffix; while (n > 0 && width(text) > max);
+  }
+  ctx.restore();
+  return text;
 }
 
 // Hud.ScoreTotal: tfScore (40 px at 0.765), tfMultiple "xN" (24 px at 0.823)
@@ -78,6 +110,11 @@ function drawPlayerTags() {
     const w = WEAPONS[p.weapon] || WEAPONS[0], ammo = p.ammo[p.weapon];
     const x = sx(p.x), y = sy(p.y);
     hudText(w.short + (ammo === Infinity || ammo === null ? '' : `:${ammo}`), x, y - 65.9 - 7.95 + 0.593 * 15.2, 13, 'center', '#fff', true, true, -0.6);
+    // Online, four character designs can repeat: each player also carries
+    // its slot number and name in the slot's colour.
+    if (game.online && players.length > 1) {
+      hudText(fitLabel(`P${p.id + 1} `, slotName(p.id), '', 12, 90), x, y - 84, 12, 'center', SLOT_COLORS[p.id] || '#fff');
+    }
     const frame = Math.floor(Math.min(Math.max(1, 101 * clamp(p.hp / p.max, 0, 1) + 1), 101)) - 1;
     drawSprite('hudLife', frame, x + 1, y - 57.4, 1, 0, 0.6667, 0.75);
   }

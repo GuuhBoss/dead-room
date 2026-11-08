@@ -18,7 +18,7 @@ function renderFloor() {}
 function gatherInput(p) { return __inputs[p.id]; }
 `;
 const snapshotCode = `JSON.stringify({
-  game: { state: game.state === 'over' ? 'over' : 'playing', mode: game.mode, roomIndex: game.roomIndex, demo: false, options: game.options, characters: game.characters, winner: game.winner ?? null, fragLimit: game.fragLimit ?? 10 },
+  game: { state: game.state === 'over' ? 'over' : 'playing', mode: game.mode, roomIndex: game.roomIndex, playerCount: players.length, demo: false, options: game.options, characters: game.characters, winner: game.winner ?? null, fragLimit: game.fragLimit ?? 10 },
   ticks,
   players, zombies, corpses, barrels, blocks, mines, pickups, shots, tracers, blasts, texts,
   score, kills, level, toSpawn, intermission, runTime, combo, upgrades, banner, toast, clock, shake, flashLight
@@ -33,8 +33,9 @@ if (game.state === 'playing') {
 game.state === 'over';
 `);
 
-export function createSimulation({ mode = 'solo', roomIndex = 0, sourceDir = defaultSources, seed = randomBytes(4).readUInt32LE() } = {}) {
+export function createSimulation({ mode = 'solo', roomIndex = 0, playerCount = mode === 'solo' ? 1 : 2, sourceDir = defaultSources, seed = randomBytes(4).readUInt32LE() } = {}) {
   if (!['solo', 'coop', 'deathmatch'].includes(mode)) throw new RangeError('Unsupported mode');
+  if (!Number.isInteger(playerCount) || playerCount < (mode === 'solo' ? 1 : 2) || playerCount > (mode === 'solo' ? 1 : 6)) throw new RangeError('Invalid player count');
   // Read together for every new room; no stale process-wide Script cache when
   // the shared simulation changes during development. Existing rooms stay pinned.
   const files = ['01-data.js', '02-world.js', '03-combat.js', '07-main.js'];
@@ -47,13 +48,14 @@ export function createSimulation({ mode = 'solo', roomIndex = 0, sourceDir = def
   if (!Number.isInteger(roomIndex) || roomIndex < 0 || roomIndex >= metadata.roomCount) throw new RangeError('Invalid room');
   context.__seed = seed;
   context.__mode = mode === 'solo' ? 1 : mode === 'coop' ? 2 : 3;
-  context.__playerCount = mode === 'solo' ? 1 : 2;
+  context.__playerCount = playerCount;
   context.__roomIndex = roomIndex;
   context.__inputs = Array.from({ length: context.__playerCount }, neutralInput);
-  vm.runInContext('Math.random = seeded(__seed); game.demo = false; game.state = "playing"; resetRun(__mode, __roomIndex);', context, { timeout: 1000 });
+  vm.runInContext('Math.random = seeded(__seed); game.demo = false; game.state = "playing"; game.playerCount = __playerCount; game.characters = Array.from({length:Math.max(2,__playerCount)}, (_,i)=>i===0?3:(i-1)%4); resetRun(__mode, __roomIndex);', context, { timeout: 1000 });
   let tick = 0, completed = false;
   return Object.freeze({
     ...metadata,
+    playerCount,
     sourceHash: createHash('sha256').update(sources.join('\n')).digest('hex'),
     // Local audit hook for the integrating developer; never exposed over WS.
     rules() {

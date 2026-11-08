@@ -13,9 +13,10 @@ Restarting aborts active sessions; completed scores survive. Clear or migrate
 the board when changing gameplay rules/map identities; the wire format does not
 separate scores by source version.
 
-The backend follows [online-contract.md](online-contract.md). Deathmatch now has backend support and uses shared numeric mode 3 with two
-players. Its local split view and online client are implemented.
-Solo and two-player cooperative survival have separate leaderboard categories.
+The backend follows [online-contract.md](online-contract.md). Local multiplayer
+retains the original two-player rules. Online cooperative survival and deathmatch
+support 2–6 members, with lobby, camera, HUD and ranking UI for larger parties.
+Solo and cooperative team sizes have separate leaderboard categories.
 
 ## Wire use
 
@@ -26,18 +27,25 @@ All messages have exact allowed keys; extra score, state, playerId, room code or
 dt fields in an input are rejected.
 
 ```js
-socket.send(JSON.stringify({ type: 'create', name: 'Alice', roomIndex: 0, mode: 'coop' }));
-// Partner uses the code delivered in welcome:
+socket.send(JSON.stringify({ type: 'create', name: 'Alice', roomIndex: 0, mode: 'coop', maxPlayers: 6 }));
+// Up to five guests use the code delivered in welcome:
 partner.send(JSON.stringify({ type: 'join', code: 'ABCDEFGH', name: 'Bob' }));
 // Optional cosmetic choice, only before the host starts:
 partner.send(JSON.stringify({ type: 'character', character: 2 }));
-// Only player 0 can start; cooperative mode requires both connected players.
+// Only player 0 can start; multiplayer needs at least two connected members.
 socket.send(JSON.stringify({ type: 'start' }));
 // Each socket controls only its assigned player; send held state around 30Hz.
 socket.send(JSON.stringify({ type: 'input', seq: 0, input: {
   dx: 0, dy: -1, fire: true, prev: false, next: false, select: -1
 } }));
 ```
+
+Multiplayer `maxPlayers` is optional, defaults to 6, and accepts integers 2–6.
+Solo permits 1 or omission. Welcome/lobby messages expose capacity; slots are
+contiguous 0–5. The host can start with any actual membership from 2 to capacity.
+Only connected members enter the simulation; unused capacity creates no players.
+Membership locks at start. Default characters are 3 for the host and
+`(slot-1)%4` for guests; duplicate selections are allowed.
 
 `seq` must be a nonnegative safe integer, strictly increasing within a run.
 Movement axes are exactly -1, 0 or 1. Fire/prev/next are booleans; select is -1
@@ -63,7 +71,9 @@ render snapshots without advancing combat or submitting scores.
 
 The shared original-game lifecycle produces a final snapshot with
 `game.state: 'over'` after the original death delay. A downed cooperative player
-can respawn while their partner survives. The backend does not force an earlier
+can respawn while a partner survives. Larger teams use a living partner and a
+distinct free floor position, and apply the original leash to all living pairs.
+The backend does not force an earlier
 game over. It records an authentic completed survival run once. A later
 `start` is rejected. During the completed room's60-second retention, members
 may send `{type:'rematch'}`: all must vote before the server creates a fresh
@@ -74,7 +84,7 @@ budget, and exhausted budgets cannot start another run. Votes cannot target
 another slot or room. Each authentic new survival defeat is ranked once under
 its own UUID; deathmatch runs remain excluded. Leaving or expiry cancels votes.
 An aborted run sends
-`{type:'ended',reason}` and releases all members. Leaving or disconnecting either
+`{type:'ended',reason}` and releases all members. Leaving or disconnecting any
 member ends the entire room, including a lobby. There is no host migration,
 rejoin, client pause, score submission, or local fallback to online ranking.
 `{type:'ping',at:<finite nonnegative number>}` returns pong with the same at.
@@ -126,12 +136,17 @@ when the transport reports it or the heartbeat expires.
 
 ## Leaderboard and persistence
 
-`GET /api/leaderboard?roomIndex=0&mode=solo` returns `{entries:[...]}`. Both filters
-are optional. Entries contain exactly id, names, score, kills, level,
+`GET /api/leaderboard?roomIndex=0&mode=coop&players=6` returns `{entries:[...]}`.
+All three filters are optional. `players` is an integer 1–6, measured by actual
+team membership (`names.length`), not lobby capacity. Solo requires 1; co-op
+allows 2–6. Entries contain exactly id, names, score, kills, level,
 bestMultiplier, duration (simulation seconds), roomIndex, mode and createdAt
 (UTC ISO time). Results are sorted by score descending, then kills descending,
 then creation time/id, with a maximum of 50 returned. Storage retains up to 50
-per room/mode and 1,000 total. Invalid/duplicate/unsupported query fields return
+per room/mode/team size and 6,000 total (all 18 original maps and six survival
+categories need 5,400). Old version-1 records remain valid with no migration.
+Larger-team categories cannot evict original two-player categories.
+Invalid/duplicate/unsupported query fields return
 400. HEAD returns identical headers with no body. POST returns 405.
 
 A fresh UUID identifies each run. Only server-observed defeat supplies its
@@ -142,7 +157,7 @@ There is no claim to detect bots or prevent a server administrator changing disk
 
 `DATA_DIR/leaderboard.json` is a versioned, validated store. Writes use a private,
 exclusive temporary file, fsync, rename, then directory fsync. Readers see the
-old or new complete JSON. Startup bounds file size at 1 MiB, rejects malformed
+old or new complete JSON. Startup bounds file size at 8 MiB, rejects malformed
 structure, filters invalid rows and duplicate ids, and bounds retained entries.
 Corrupt files are moved to one `leaderboard.corrupt.json` backup and startup
 continues empty. Storage failures do not accept client results or crash gameplay;
@@ -159,7 +174,8 @@ VM isolation separates room state; it is not a sandbox for untrusted plugins.
 Original logic accumulates at25Hz normal speed inside30Hz server updates;
 snapshots publish at20Hz. Entity positions are cells, not pixels. Compact
 records omit private navigation/canvas/particle work. Snapshots include ticks,
-game options/characters, winner and fragLimit.
+game options/characters, actual playerCount, winner and fragLimit. Each player
+includes an attributed-frag counter for larger deathmatch parties.
 
 Parent independently compared all58 progression milestones and all18 room
 collision grids and spawn/item markers against the publisher binary exports.
@@ -177,7 +193,7 @@ cases, including projectile gravity and floor bounce. Navigation retains the
 original3ms work budget, so scheduling under CPU pressure can affect the wave's
 completion frame; seeded simulation is not a promise of identical routing
 under arbitrary host load. A finite guard avoids NaN on coincident body centres.
-The full suite currently passes65 tests. Static serving now recognizes the
+The full suite currently passes 79 tests. Static serving now recognizes the
 original MP3 audio, WOFF fonts and JPEG previews; an HTTP regression check
 verifies their MIME types and HEAD behavior.
 
@@ -191,11 +207,14 @@ at height .84. Three new regression tests cover these facts. Snapshots include
 player.anim and tracer z1/z2 so the frontend can render the same pose/heights.
 These source checks do not establish side-by-side visual parity.
 
-Deathmatch is numeric mode3 with TWO players. All rewards are active, nonpistol
+Deathmatch is numeric mode3 with 2–6 online players. All rewards are active, nonpistol
 weapons start empty, enemy spawns are disabled, and friendly damage is always
-on. The shared lifecycle decides the winner. Server completion validates a
-winner0/1 and defeated opponent with deaths at the frag limit. Online defaults
-to10 frags, matching original; local options allow5/10/20/50. Deathmatch never
+on. The shared lifecycle decides the winner. With two players, server completion
+validates a winner0/1 and defeated opponent with deaths at the original limit.
+With 3–6 players it validates winner0–5 with at least 10 attributed opponent
+kills. Self/environment deaths give no opponent a frag. First lethal damage owns
+the kill; projectile and explosion ownership comes from server simulation.
+Online defaults to10; local options allow5/10/20/50. Deathmatch never
 enters the survival leaderboard, whose filters remain solo/coop only.
 
 Welcome includes runId, the room's UUID. Completion sends
@@ -222,3 +241,20 @@ Production has no score, teleport, seed, damage or debug scenario endpoint.
 isolation, host checks, connection/origin/rate/capacity limits, stale controls,
 abort paths, survival completion exactly once, deathmatch exclusion, atomic
 persistence/restarts/corruption/storage failures, and static file security.
+
+## Six-player implementation status
+
+The backend's six-player extension passes 79 tests, including all18 room spawn
+layouts, sixth-slot input/character isolation, seventh-member rejection,
+partial-capacity starts, six-member departure cleanup, unanimous rematches,
+per-size persisted rankings, larger-party respawn and a sixth-slot free-for-all
+winner. Explosive projectile, placed/map barrel and chain-reaction kills preserve
+server ownership. Original two-player regression checks also pass.
+
+The same Opus frontend owner completed the larger lobby/HUD/camera changes.
+Parent independently exercised six-browser character isolation, all-slot state,
+sixth-slot touch movement/fire, shared/own cameras, departure aborts, original
+offline two-player reset, six-member co-op/deathmatch rematches and exact UUID
+ranking in the six-player table. No browser page errors occurred. End screens
+and ranking checks use trusted server-only defeat/winner fixtures, not client
+score mutation. See fidelity-validation.md for the deployment checkpoint.

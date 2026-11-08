@@ -42,7 +42,7 @@ export function attachOnline(server, leaderboard, options = {}) {
   }
   const error = (client, message) => send(client, { type: 'error', message });
   function lobby(room) {
-    const message = { type: 'lobby', code: room.code, mode: room.mode, roomIndex: room.roomIndex, players: room.members.map(member => ({ id: member.playerId, name: member.name, character: member.character })), hostId: 0 };
+    const message = { type: 'lobby', code: room.code, mode: room.mode, roomIndex: room.roomIndex, maxPlayers: room.maxPlayers, players: room.members.map(member => ({ id: member.playerId, name: member.name, character: member.character })), hostId: 0 };
     for (const member of room.members) send(member, message);
   }
   function state(room) {
@@ -65,10 +65,10 @@ export function attachOnline(server, leaderboard, options = {}) {
   }
   function welcome(client, room, playerId, name) {
     client.room = room; client.playerId = playerId; client.name = name;
-    client.character = playerId === 0 ? 3 : 0; client.rematch = false;
+    client.character = playerId === 0 ? 3 : (playerId - 1) % 4; client.rematch = false;
     client.seq = -1; client.input = neutralInput(); client.inputAt = 0;
     room.members.push(client);
-    send(client, { type: 'welcome', code: room.code, playerId, host: playerId === 0, runId: room.id, mode: room.mode, roomIndex: room.roomIndex });
+    send(client, { type: 'welcome', code: room.code, playerId, host: playerId === 0, runId: room.id, mode: room.mode, roomIndex: room.roomIndex, maxPlayers: room.maxPlayers });
     lobby(room);
   }
   function handle(client, message, now) {
@@ -76,9 +76,13 @@ export function attachOnline(server, leaderboard, options = {}) {
     if (message.type !== 'input' && !consume(client.controls, now)) { error(client, 'Control rate limit exceeded'); return; }
     switch (message.type) {
       case 'create': {
-        if (!exact(message, ['type', 'name', 'roomIndex', 'mode'])) return error(client, 'Invalid create message');
+        const fields = ['type', 'name', 'roomIndex', 'mode'];
+        if (Object.hasOwn(message, 'maxPlayers')) fields.push('maxPlayers');
+        if (!exact(message, fields)) return error(client, 'Invalid create message');
         const name = playerName(message.name);
         if (!name || !['solo', 'coop', 'deathmatch'].includes(message.mode) || !Number.isInteger(message.roomIndex) || message.roomIndex < 0 || message.roomIndex > 255) return error(client, 'Invalid room settings or player name');
+        const maxPlayers = Object.hasOwn(message, 'maxPlayers') ? message.maxPlayers : message.mode === 'solo' ? 1 : 6;
+        if (!Number.isInteger(maxPlayers) || maxPlayers < (message.mode === 'solo' ? 1 : 2) || maxPlayers > (message.mode === 'solo' ? 1 : 6)) return error(client, 'Invalid player capacity');
         if (client.room) return error(client, 'Leave your current room first');
         if (!consume(client.ip.creates, now)) return error(client, 'Room creation rate limit exceeded');
         if (rooms.size >= limits.rooms || [...rooms.values()].filter(room => room.ip === client.ipAddress).length >= limits.roomsPerIp) return error(client, 'Room capacity reached');
@@ -87,7 +91,7 @@ export function attachOnline(server, leaderboard, options = {}) {
         catch (cause) { return error(client, cause instanceof RangeError ? 'Invalid room settings' : 'Simulation is unavailable'); }
         let roomCode;
         do { roomCode = code(); } while (rooms.has(roomCode));
-        const room = { code: roomCode, id: randomUUID(), mode: message.mode, roomIndex: message.roomIndex, ip: client.ipAddress, members: [], simulation, status: 'lobby', createdAt: now, startedAt: 0, finishedAt: 0 };
+        const room = { code: roomCode, id: randomUUID(), mode: message.mode, roomIndex: message.roomIndex, maxPlayers, ip: client.ipAddress, members: [], simulation, status: 'lobby', createdAt: now, startedAt: 0, finishedAt: 0 };
         rooms.set(roomCode, room);
         welcome(client, room, 0, name);
         break;
@@ -96,15 +100,14 @@ export function attachOnline(server, leaderboard, options = {}) {
         if (!exact(message, ['type', 'code', 'name']) || typeof message.code !== 'string' || !/^[A-Z2-9]{8}$/.test(message.code) || !playerName(message.name)) return error(client, 'Invalid room code or player name');
         if (client.room) return error(client, 'Leave your current room first');
         const room = rooms.get(message.code);
-        if (!room || room.mode === 'solo' || room.status !== 'lobby' || room.members.length !== 1 || room.members[0].ws.readyState !== WebSocket.OPEN) return error(client, 'Room is unavailable');
-        welcome(client, room, 1, playerName(message.name));
+        if (!room || room.mode === 'solo' || room.status !== 'lobby' || room.members.length >= room.maxPlayers || room.members.some(member => member.ws.readyState !== WebSocket.OPEN)) return error(client, 'Room is unavailable');
+        welcome(client, room, room.members.length, playerName(message.name));
         break;
       }
       case 'character': {
         if (!exact(message, ['type', 'character']) || !Number.isInteger(message.character) || message.character < 0 || message.character > 3) return error(client, 'Invalid character selection');
         const room = client.room;
         if (!room || room.status !== 'lobby') return error(client, 'Character changes require a lobby');
-        room.simulation.setCharacter(client.playerId, message.character);
         client.character = message.character;
         lobby(room);
         break;
@@ -114,7 +117,11 @@ export function attachOnline(server, leaderboard, options = {}) {
         const room = client.room;
         if (!room || client.playerId !== 0) return error(client, 'Only the room host may start');
         if (room.status !== 'lobby') return error(client, 'Run has already started or ended');
-        if (room.members.length !== (room.mode === 'solo' ? 1 : 2) || room.members.some(member => member.ws.readyState !== WebSocket.OPEN)) return error(client, 'Waiting for both players');
+        if (room.members.length < (room.mode === 'solo' ? 1 : 2) || room.members.length > room.maxPlayers || room.members.some(member => member.ws.readyState !== WebSocket.OPEN)) return error(client, 'Waiting for both players (at least two required)');
+        try {
+          if (room.simulation.playerCount !== room.members.length) room.simulation = createSimulation({ mode: room.mode, roomIndex: room.roomIndex, playerCount: room.members.length, sourceDir: options.sourceDir });
+          for (const member of room.members) room.simulation.setCharacter(member.playerId, member.character);
+        } catch { remove(room, 'Simulation is unavailable'); break; }
         room.status = 'playing'; room.startedAt = now;
         for (const member of room.members) { member.input = neutralInput(); member.seq = -1; member.inputAt = 0; }
         state(room);
@@ -142,7 +149,7 @@ export function attachOnline(server, leaderboard, options = {}) {
         }
         let simulation;
         try {
-          simulation = createSimulation({ mode: room.mode, roomIndex: room.roomIndex, sourceDir: options.sourceDir });
+          simulation = createSimulation({ mode: room.mode, roomIndex: room.roomIndex, playerCount: room.members.length, sourceDir: options.sourceDir });
           for (const member of room.members) simulation.setCharacter(member.playerId, member.character);
         } catch { remove(room, 'Simulation is unavailable'); break; }
         room.simulation = simulation; room.id = randomUUID();
@@ -220,7 +227,10 @@ export function attachOnline(server, leaderboard, options = {}) {
     // Only connected members with a live input/heartbeat lease may rank.
     if (room.members.some(member => member.ws.readyState !== WebSocket.OPEN || member.ws._socket?.destroyed || member.ws.bufferedAmount > limits.buffered || now - member.lastMessage > limits.idleMs || now - member.aliveAt > limits.idleMs)) return remove(room, 'Connection lost; run aborted');
     const snapshot = room.simulation.snapshot();
-    if (!room.simulation.completed || snapshot.players.length !== room.members.length || (room.mode === 'deathmatch' ? ![0, 1].includes(snapshot.game.winner) || !Number.isInteger(snapshot.game.fragLimit) || !snapshot.players.some(player => player.id !== snapshot.game.winner && player.deaths >= snapshot.game.fragLimit) : !snapshot.players.every(player => player.down && player.hp <= 0))) return remove(room, 'Invalid completion; run aborted');
+    const winner = snapshot.players.find(player => player.id === snapshot.game.winner);
+    const validDuel = snapshot.players.length === 2 && !!winner && snapshot.players.some(player => player.id !== winner.id && player.deaths >= snapshot.game.fragLimit);
+    const validFreeForAll = snapshot.players.length > 2 && !!winner && Number.isSafeInteger(winner.frags) && winner.frags >= snapshot.game.fragLimit;
+    if (!room.simulation.completed || snapshot.players.length !== room.members.length || (room.mode === 'deathmatch' ? !Number.isInteger(snapshot.game.fragLimit) || !(validDuel || validFreeForAll) : !snapshot.players.every(player => player.down && player.hp <= 0))) return remove(room, 'Invalid completion; run aborted');
     room.status = 'complete'; room.finishedAt = now;
     let recorded = false;
     try {

@@ -53,7 +53,7 @@ export function createApp(options = {}) {
       const filters = {};
       let valid = true;
       for (const key of url.searchParams.keys()) {
-        if (!['roomIndex', 'mode'].includes(key) || url.searchParams.getAll(key).length !== 1) valid = false;
+        if (!['roomIndex', 'mode', 'players'].includes(key) || url.searchParams.getAll(key).length !== 1) valid = false;
       }
       if (url.searchParams.has('mode')) {
         filters.mode = url.searchParams.get('mode');
@@ -63,6 +63,11 @@ export function createApp(options = {}) {
         const value = url.searchParams.get('roomIndex');
         filters.roomIndex = Number(value);
         if (!/^(0|[1-9][0-9]{0,2})$/.test(value) || filters.roomIndex > 255) valid = false;
+      }
+      if (url.searchParams.has('players')) {
+        const value = url.searchParams.get('players');
+        filters.players = Number(value);
+        if (!/^[1-6]$/.test(value) || filters.mode === 'solo' && filters.players !== 1 || filters.mode === 'coop' && filters.players < 2) valid = false;
       }
       const body = JSON.stringify(valid ? { entries: leaderboard.list(filters) } : { error: 'Invalid leaderboard filters' });
       res.writeHead(valid ? 200 : 400, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': Buffer.byteLength(body), 'Cache-Control': 'no-store' });

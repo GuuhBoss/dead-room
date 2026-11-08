@@ -241,6 +241,25 @@ table.scores { width: 100%; border-collapse: collapse; background: #fff; }
 .scores td:nth-child(3) { font: 800 22px/1 var(--sans); }
 .scores tr.mine td { background: #ffe2df; }
 
+/* Online parties: slot colour chips, open slots, compact cards when the room
+   holds more than two. */
+.lobby-players .slot { display: inline-block; min-width: 2.2em; padding: 0 6px; border-radius: 6px; background: var(--slot, #999); color: #111; text-align: center; font-weight: 800; }
+.lobby-players li.open-slot { justify-content: center; min-height: 64px; color: var(--grey); background: rgba(244, 244, 244, 0.6); border: 2px dashed #cfcfcf; }
+.lobby-players li.open-slot .slot { background: #d6d6d6; }
+.lobby-players.party { grid-template-columns: repeat(3, 1fr); }
+.lobby-players.party li { gap: 10px; padding: 6px 10px; }
+.lobby-players.party .charpick { grid-template-columns: 30px 80px 30px; gap: 4px; }
+.lobby-players.party .charcard { width: 80px; height: 80px; }
+.lobby-players.party .charcard b { left: 5px; top: 4px; font-size: 15px; }
+.lobby-players.party .charpick .arrow { width: 30px; height: 46px; }
+#net-lobby:has(.lobby-players.party) .lobby-facts { margin: 12px 0; }
+#net-lobby:has(.lobby-players.party) .view-choice { margin-top: 10px; }
+#net-lobby:has(.lobby-players.party) .view-choice small { font-size: 16px; }
+#net-lobby:has(.lobby-players.party) .row-end { margin-top: 10px; }
+.board-size { display: flex; align-items: center; gap: 6px; font-weight: 700; }
+.board-size button { min-width: 44px; min-height: 40px; border-radius: 8px; background: #f1f1f1; font-weight: 800; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15); }
+.board-size button[aria-pressed='true'] { background: var(--red); color: #fff; }
+
 /* Online lobby: each player's screen choice. */
 .view-choice { margin-top: 18px; }
 .view-choice small { flex-basis: 100%; color: var(--grey); font-weight: 400; font-size: 18px; }
@@ -466,6 +485,16 @@ body.fluid { display: block; overscroll-behavior: none; --arrow: clamp(44px, 12v
 
 .fluid .rematch-status { position: static; font-size: 16px; }
 .fluid .view-choice small { font-size: 14px; }
+
+/* Six-slot lobby on a phone: two compact columns. */
+.fluid .lobby-players.party { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.fluid .lobby-players.party li { flex-direction: column; gap: 4px; padding: 6px 4px; font-size: 14px; text-align: center; }
+.fluid .lobby-players.party .charpick { grid-template-columns: var(--arrow) 72px var(--arrow); gap: 2px; }
+.fluid .lobby-players.party .charcard { width: 72px; height: 72px; }
+.fluid .lobby-players.party .charpick .arrow { width: var(--arrow); height: 48px; }
+.fluid .lobby-players.party li.open-slot { min-height: 44px; }
+.fluid .board-size { flex-wrap: wrap; justify-content: center; }
+.fluid .board-size button { min-height: 44px; }
 
 /* Death match side swap, at the seam between the two views. */
 .fluid .swap-views { left: auto; right: calc(env(safe-area-inset-right) + 6px); top: calc(var(--game-top, 0px) + var(--game-h) / 2 - 22px); width: 66px; height: 44px; background-size: 52px auto; }

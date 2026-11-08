@@ -15,7 +15,7 @@ function record(keys) {
   };
 }
 const REC = {
-  player: record(['id', 'x', 'y', 'angle', 'dir', 'hp', 'max', 'weapon', 'ammo', 'have', 'state', 'down', 'inv', 'walk', 'moving', 'hits', 'look', 'deaths', 'af', 'alpha', 'anim']),
+  player: record(['id', 'x', 'y', 'angle', 'dir', 'hp', 'max', 'weapon', 'ammo', 'have', 'state', 'down', 'inv', 'walk', 'moving', 'hits', 'look', 'deaths', 'frags', 'af', 'alpha', 'anim']),
   zombie: record(['id', 'x', 'y', 'angle', 'devil', 'state', 'af', 'walk', 'hits']),
   corpse: record(['id', 'x', 'y', 'angle', 'devil', 't', 'life', 'look']),
   barrel: record(['id', 'x', 'y', 'r', 'placed']),
@@ -40,7 +40,7 @@ function makePlayer(id, x, y, angle) {
     id, x, y, r: RULES.player.radius, mass: RULES.player.mass, angle, dir: dirOf(angle), hp: RULES.player.life, max: RULES.player.life,
     weapon: 0, ammo: WEAPONS.map(w => (w.ammo === Infinity ? Infinity : 0)), cap: WEAPONS.map(w => w.ammo), have: WEAPONS.map((w, i) => i === 0),
     wid: WEAPONS.map(() => 0), cool: 0, detonate: false, state: 'play', count: 0, kx: 0, ky: 0, inv: RULES.player.spawnInvincible,
-    down: false, walk: 0, moving: false, hits: 0, look: CHARACTERS[game.characters[id] ?? 0].key, deaths: 0, af: 0, alpha: 1, retAngle: angle,
+    down: false, walk: 0, moving: false, hits: 0, look: CHARACTERS[game.characters[id] ?? 0].key, deaths: 0, frags: 0, killer: null, af: 0, alpha: 1, retAngle: angle,
     input: { dx: 0, dy: 0, fire: false }, queue: { prev: false, next: false, select: -1, tap: false },
     fireDown: false, firePressed: false, fireReleased: false, pressTick: 0, releaseTick: 0, cell: -1,
     anim: { weapon: 'pistol', moving: false, frame: 0 },
@@ -89,8 +89,7 @@ function playerControl(p) {
   let dx = p.input.dx * P.speed, dy = p.input.dy * P.speed;
   if (dx || dy) { p.angle = normAngle(Math.atan2(dy, dx)); p.dir = dirOf(p.angle); }
   // KeepDistance: co-op partners stay on one screen.
-  const other = players.find(o => o !== p && !o.down);
-  if (other && game.mode === 2) {
+  for (const other of game.mode === 2 ? players.filter(o => o !== p && !o.down) : []) {
     if (Math.abs(other.x - (p.x + dx)) > Math.abs(other.x - p.x) && Math.abs(other.x - (p.x + dx)) > P.leash[0]) dx = 0;
     if (Math.abs(other.y - (p.y + dy)) > Math.abs(other.y - p.y) && Math.abs(other.y - (p.y + dy)) > P.leash[1]) dy = 0;
   }
@@ -310,7 +309,12 @@ function processAffects(e) {
       const k = d / a.range;
       dmg = k > 0.5 ? (k > 0.75 ? a.damage * 0.5 : a.damage * 0.75) : a.damage;
     }
+    const before = e.hp;
     e.hp -= dmg;
+    if (isPlayer && game.mode === 3 && players.length > 2 && before > 0 && e.hp <= 0) {
+      const attacker = a.ownerUid !== undefined ? players.find(p=>p._uid===a.ownerUid) : players.find(p=>p.id===a.owner);
+      e.killer = attacker && attacker !== e ? attacker.id : null;
+    }
     e.hits++;
     const len = a.type === 'explosion' ? Math.min((dmg / 5) * 2 / CELL / e.mass, 0.3)
       : a.type === 'zombie' ? Math.max(dmg / 5 / CELL / e.mass, 0.3)
@@ -350,6 +354,10 @@ function startDying(e) {
   if (players.includes(e)) {
     e.hp = 0; e.down = true; e.state = 'dying'; e.af = 0; e.kx = e.ky = 0;
     alive--; e.deaths++;
+    if (game.mode === 3 && players.length > 2 && e.killer !== null) {
+      const killer = players.find(p=>p.id===e.killer);
+      if (killer && ++killer.frags >= game.fragLimit && game.winner === null) game.winner = killer.id;
+    }
     if (game.mode === 3) dropPickup(e.x, e.y); // CWorld.LogKill: a fallen deathmatch player leaves a box
     return;
   }
@@ -365,8 +373,10 @@ function startDying(e) {
 function playerDead() {
   if (game.state !== 'playing') return;
   if (game.mode === 3) {
-    if (players[0].deaths === game.fragLimit) game.winner = 1;
-    if (players[1].deaths === game.fragLimit) game.winner = 0;
+    if (players.length === 2) {
+      if (players[0].deaths === game.fragLimit) game.winner = 1;
+      if (players[1].deaths === game.fragLimit) game.winner = 0;
+    }
     if (game.winner !== null) game.state = 'over';
   } else if (alive <= 0) game.state = 'over';
 }
@@ -375,10 +385,12 @@ function playerDead() {
 // In deathmatch it is the free spawn point farthest from the opponent.
 function respawnPlayer(p) {
   if (--p.count >= 0) return;
-  const other = players.find(o => o !== p); // CThing_Collection.GetOtherPlayer, alive or not
-  const spot = other ? (game.mode === 3 ? spawnFar(other) : spawnNear(other)) : null;
+  const partners = players.filter(o=>o!==p && !o.down && o.state!=='respawn');
+  if (players.length > 2 && game.mode === 2 && !partners.length) return;
+  const other = players.length > 2 ? partners.sort((a,b)=>dist(a,p)-dist(b,p))[0] : players.find(o => o !== p);
+  const spot = players.length > 2 ? partySpawn(other, game.mode === 3) : other ? (game.mode === 3 ? spawnFar(other) : spawnNear(other)) : null;
   if (!spot) return;
-  Object.assign(p, { x: spot.c + 0.5, y: spot.r + 0.5, angle: spot.angle, dir: dirOf(spot.angle), hp: p.max, down: false, alpha: 1, af: 0, kx: 0, ky: 0 });
+  Object.assign(p, { x: spot.c + 0.5, y: spot.r + 0.5, angle: spot.angle, dir: dirOf(spot.angle), hp: p.max, down: false, alpha: 1, af: 0, kx: 0, ky: 0, killer: null });
   p.inv = game.mode === 3 ? RULES.deathmatch.respawnInvincible : RULES.player.respawnInvincible;
   for (let i = 1; i < WEAPONS.length; i++) p.ammo[i] = 0;
   p.weapon = 0; p.cool = 0; p.detonate = false;
@@ -411,6 +423,31 @@ function spawnNear(o) {
     if (flagsAt(s.c, s.r) & (C_NOSPAWN | C_PLAYER)) continue;
     const d = (s.c + 0.5 - o.x) ** 2 + (s.r + 0.5 - o.y) ** 2;
     if (d < bestD && d >= 4 && Math.abs(o.x - (s.c + 0.5)) <= 19 && Math.abs(o.y - (s.r + 0.5)) <= 13) { bestD = d; best = s; }
+  }
+  return best;
+}
+
+// Online parties need more than the original two spawn points on some rooms.
+// Prefer original markers; fall back to free floor cells, never occupied solids.
+function partySpawn(anchor, far) {
+  const living = players.filter(p=>!p.down && p.state!=='respawn');
+  const choose = candidates => {
+    let best=null, score=far?-Infinity:Infinity;
+    for(const s of candidates) {
+      const x=s.c+.5,y=s.r+.5;
+      if(isSolid(s.c,s.r) || flagsAt(s.c,s.r)&(C_NOSPAWN|C_PLAYER))continue;
+      if(living.some(p=>(p.x-x)**2+(p.y-y)**2<1) || zombies.some(z=>z.solid&&(z.x-x)**2+(z.y-y)**2<1))continue;
+      if(!far && anchor && living.some(p=>Math.abs(p.x-x)>RULES.player.leash[0]||Math.abs(p.y-y)>RULES.player.leash[1]))continue;
+      const d=far ? (living.length?Math.min(...living.map(p=>(p.x-x)**2+(p.y-y)**2)):0) : anchor?(anchor.x-x)**2+(anchor.y-y)**2:0;
+      if(best===null || (far?d>score:d<score)){best=s;score=d;}
+    }
+    return best;
+  };
+  let best=choose(spawnP);
+  if(!best) {
+    const cells=[];
+    for(let r=0;r<room.rows;r++)for(let c=0;c<room.cols;c++)cells.push({c,r,angle:anchor?.angle||0});
+    best=choose(cells);
   }
   return best;
 }
@@ -641,7 +678,12 @@ function applyBlockDamage(b, a) {
 
 function updateBarrel(b) {
   growObject(b, RULES.barrel.radius);
-  if (!b.grow && b.affects?.length) { b.affects=null; explodeBarrel(b); }
+  if (!b.grow && b.affects?.length) {
+    if(game.mode===3 && players.length>2 && b.ownerUid===undefined) {
+      const a=b.affects[b.affects.length-1];b.ownerUid=a.ownerUid??players.find(p=>p.id===a.owner)?._uid;
+    }
+    b.affects=null; explodeBarrel(b);
+  }
 }
 
 function updateBlock(b) {
@@ -732,7 +774,7 @@ function detonate(e) {
   blasts.push(make('blast', { x: e.x, y: e.y, range, t: 0 }));
   shake = Math.min(1, shake + 0.5);
   flashLight = Math.min(0.6, flashLight + 0.3);
-  const a = { type: 'explosion', damage: e.damage, x: e.x, y: e.y, range };
+  const a = { type: 'explosion', damage: e.damage, x: e.x, y: e.y, range, ownerUid: e.ownerUid };
   const inArea = list => thingsInArea(e.x - range, e.y - range, e.x + range, e.y + range, list);
   for (const p of inArea(players)) if (!p.down) affect(p, a);
   for (const z of inArea(zombies)) if (z.shootable) affect(z, a);
@@ -995,12 +1037,22 @@ function startRun() {
   for (const [c, r] of def.barrels) addBarrel(c + 0.5, r + 0.5, RULES.barrel.mapDamage, false, false);
   for (const [c, r] of def.walls) addBlock(c + 0.5, r + 0.5, false);
   for (const [c, r] of def.pickups) pickups.push(make('pickup', { x: c + 0.5, y: r + 0.5, drop: false, hidden: 0, life: 0 }));
+  const partySize = game.mode === 1 ? 1 : clamp(Number.isInteger(game.playerCount) ? game.playerCount : 2, 2, 6);
   const s = def.start;
   players.push(makePlayer(0, s.c + 0.5, s.r + 0.5, s.angle));
   if (game.mode >= 2) {
-    const spot = (game.mode === 3 ? spawnFar(players[0]) : spawnNear(players[0])) || s;
+    if(partySize>2)markPlayers();
+    const spot = partySize>2 ? partySpawn(players[0],game.mode===3) : (game.mode === 3 ? spawnFar(players[0]) : spawnNear(players[0])) || s;
+    if(!spot)throw new Error('Room has no free party spawn');
     players.push(makePlayer(1, spot.c + 0.5, spot.r + 0.5, spot.angle));
   }
+  for(let id=2;id<partySize;id++) {
+    markPlayers();
+    const spot=partySpawn(players[0], game.mode===3);
+    if(!spot)throw new Error('Room has no free party spawn');
+    players.push(makePlayer(id,spot.c+.5,spot.r+.5,spot.angle));
+  }
+  game.playerCount=players.length;
   alive = players.length;
   markPlayers();
   setMultiplier(0, true);
