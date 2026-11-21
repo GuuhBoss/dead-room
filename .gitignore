@@ -1,2 +1,9 @@
 node_modules/
 dist/
+
+# Authoritative leaderboard storage (DATA_DIR defaults to data/).
+data/
+
+# Local browser verification artifacts.
+.playwright-cli/
+output/playwright/

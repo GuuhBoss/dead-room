@@ -1,0 +1,296 @@
+{
+  "sourceUrl": "https://www.crazymonkeygames.com/swf-nr2kjn-jekb/boxhead2play.swf",
+  "sha256": "34ff145d96891ddea20278700c8b1fb6fd6273ca0e71b73d8bdf0df183fdbece",
+  "upgrades": [
+    {
+      "at": 3,
+      "target": "pistol",
+      "prop": "FastFire"
+    },
+    {
+      "at": 5,
+      "target": "player",
+      "unlock": "uzi"
+    },
+    {
+      "at": 8,
+      "target": "pistol",
+      "prop": "DoubleDamage"
+    },
+    {
+      "at": 10,
+      "target": "player",
+      "unlock": "shotgun"
+    },
+    {
+      "at": 13,
+      "target": "uzi",
+      "prop": "RapidFire"
+    },
+    {
+      "at": 15,
+      "target": "player",
+      "unlock": "barrel"
+    },
+    {
+      "at": 17,
+      "target": "uzi",
+      "prop": "DoubleAmmo"
+    },
+    {
+      "at": 18,
+      "target": "shotgun",
+      "prop": "FastFire"
+    },
+    {
+      "at": 20,
+      "target": "player",
+      "unlock": "grenade"
+    },
+    {
+      "at": 21,
+      "target": "shotgun",
+      "prop": "DoubleAmmo"
+    },
+    {
+      "at": 23,
+      "target": "uzi",
+      "prop": "LongShot"
+    },
+    {
+      "at": 26,
+      "target": "barrel",
+      "prop": "DoubleAmmo"
+    },
+    {
+      "at": 30,
+      "target": "player",
+      "unlock": "fakewall"
+    },
+    {
+      "at": 31,
+      "target": "shotgun",
+      "prop": "WideShot"
+    },
+    {
+      "at": 32,
+      "target": "barrelObject",
+      "prop": "BigBang"
+    },
+    {
+      "at": 33,
+      "target": "grenade",
+      "prop": "ClusterExplode"
+    },
+    {
+      "at": 35,
+      "target": "shotgun",
+      "prop": "LongShot"
+    },
+    {
+      "at": 36,
+      "target": "barrel",
+      "prop": "QuadAmmo"
+    },
+    {
+      "at": 37,
+      "target": "fakewall",
+      "prop": "DoubleAmmo"
+    },
+    {
+      "at": 39,
+      "target": "uzi",
+      "prop": "QuadAmmo"
+    },
+    {
+      "at": 40,
+      "target": "player",
+      "unlock": "mine"
+    },
+    {
+      "at": 41,
+      "target": "shotgun",
+      "prop": "QuadAmmo"
+    },
+    {
+      "at": 42,
+      "target": "grenade",
+      "prop": "DoubleAmmo"
+    },
+    {
+      "at": 43,
+      "target": "shotgun",
+      "prop": "RapidFire"
+    },
+    {
+      "at": 44,
+      "target": "barrelObject",
+      "prop": "BiggerBang"
+    },
+    {
+      "at": 45,
+      "target": "grenade",
+      "prop": "BigBang"
+    },
+    {
+      "at": 47,
+      "target": "mineObject",
+      "prop": "ClusterExplode"
+    },
+    {
+      "at": 48,
+      "target": "uzi",
+      "prop": "DoubleDamage"
+    },
+    {
+      "at": 50,
+      "target": "player",
+      "unlock": "rocket"
+    },
+    {
+      "at": 51,
+      "target": "shotgun",
+      "prop": "WiderShot"
+    },
+    {
+      "at": 52,
+      "target": "grenade",
+      "prop": "QuadAmmo"
+    },
+    {
+      "at": 53,
+      "target": "fakewall",
+      "prop": "QuadAmmo"
+    },
+    {
+      "at": 54,
+      "target": "mine",
+      "prop": "DoubleAmmo"
+    },
+    {
+      "at": 55,
+      "target": "player",
+      "unlock": "chargepack"
+    },
+    {
+      "at": 56,
+      "target": "shotgun",
+      "prop": "DoubleDamage"
+    },
+    {
+      "at": 57,
+      "target": "grenade",
+      "prop": "BiggerBang"
+    },
+    {
+      "at": 58,
+      "target": "mineObject",
+      "prop": "BigBang"
+    },
+    {
+      "at": 59,
+      "target": "rocket",
+      "prop": "FastFire"
+    },
+    {
+      "at": 61,
+      "target": "uzi",
+      "prop": "InfinateRange"
+    },
+    {
+      "at": 62,
+      "target": "mineObject",
+      "prop": "BiggerBang"
+    },
+    {
+      "at": 63,
+      "target": "chargeObject",
+      "prop": "ClusterExplode"
+    },
+    {
+      "at": 64,
+      "target": "mine",
+      "prop": "QuadAmmo"
+    },
+    {
+      "at": 66,
+      "target": "rocket",
+      "prop": "DoubleAmmo"
+    },
+    {
+      "at": 68,
+      "target": "chargepack",
+      "prop": "DoubleAmmo"
+    },
+    {
+      "at": 70,
+      "target": "player",
+      "unlock": "railgun"
+    },
+    {
+      "at": 72,
+      "target": "rocket",
+      "prop": "BigBang"
+    },
+    {
+      "at": 74,
+      "target": "chargeObject",
+      "prop": "BigBang"
+    },
+    {
+      "at": 76,
+      "target": "chargepack",
+      "prop": "QuadAmmo"
+    },
+    {
+      "at": 78,
+      "target": "railgun",
+      "prop": "FastFire"
+    },
+    {
+      "at": 80,
+      "target": "railgun",
+      "prop": "DoubleAmmo"
+    },
+    {
+      "at": 85,
+      "target": "rocket",
+      "prop": "QuadAmmo"
+    },
+    {
+      "at": 90,
+      "target": "uzi",
+      "prop": "QuadDamage"
+    },
+    {
+      "at": 95,
+      "target": "chargeObject",
+      "prop": "BiggerBang"
+    },
+    {
+      "at": 100,
+      "target": "railgun",
+      "prop": "RapidFire"
+    },
+    {
+      "at": 105,
+      "target": "rocket",
+      "prop": "BiggerBang"
+    },
+    {
+      "at": 110,
+      "target": "railgun",
+      "prop": "QuadAmmo"
+    },
+    {
+      "at": 120,
+      "target": "rocket",
+      "prop": "RapidFire"
+    },
+    {
+      "at": 125,
+      "target": "railgun",
+      "prop": "LongShot"
+    }
+  ]
+}

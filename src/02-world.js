@@ -1,279 +1,341 @@
-// ─── Canvas and cached layers ───────────────────────────────────────────────
+// ─── Canvas ─────────────────────────────────────────────────────────────────
+// Headless servers load this file with stub elements, so nothing here may
+// depend on a real DOM beyond getElementById/createElement/getContext.
 const canvas = $('game');
 let ctx = canvas.getContext('2d'); // reassigned briefly while sprites are rendered
 const screenCtx = ctx;
-const stage = $('stage'), ui = $('ui');
-const layer = () => { const c = document.createElement('canvas'); return [c, c.getContext('2d')]; };
-const [floorLayer, floorCtx] = layer(), [decalLayer, decalCtx] = layer();
-// Shadows use an opaque sand-in-shade colour with the 'darken' blend, which
-// keeps the darker of the two colours: overlapping shadows merge instead of
-// stacking, with no extra layer to composite.
-const SHADOW_COLOR = 'rgb(174,159,137)';
-let pixel = 1;
-
-function worldTransform(c, dx = 0, dy = 0) {
-  c.setTransform(pixel, 0, 0, pixel, dx * pixel, (WALL_H + dy) * pixel);
+let pixel = 1, mapOrder = 0;
+function trackMapwho(e) {
+  if (!room || !Number.isFinite(e.x) || !Number.isFinite(e.y)) return;
+  const cell = Math.floor(e.y) * room.cols + Math.floor(e.x);
+  if (e._mapCell !== cell) { e._mapCell = cell; e._mapOrder = ++mapOrder; }
 }
 
-function resize() {
-  const scale = Math.min(innerWidth / W, innerHeight / H);
-  pixel = scale * Math.min(window.devicePixelRatio || 1, 2);
-  stage.style.width = `${W * scale}px`;
-  stage.style.height = `${H * scale}px`;
-  ui.style.transform = `scale(${scale})`;
-  const cw = Math.max(1, Math.round(W * pixel)), ch = Math.max(1, Math.round(H * pixel));
-  if (canvas.width === cw && canvas.height === ch) return;
-  let keep = null;
-  if (decalLayer.width > 1) {
-    keep = document.createElement('canvas');
-    keep.width = decalLayer.width; keep.height = decalLayer.height;
-    keep.getContext('2d').drawImage(decalLayer, 0, 0);
-  }
-  for (const c of [canvas, floorLayer, decalLayer]) { c.width = cw; c.height = ch; }
-  sprites.clear();
-  labels.clear();
-  if (keep) decalCtx.drawImage(keep, 0, 0, cw, ch);
-  worldTransform(decalCtx);
-  if (room) renderFloor();
-}
+// ─── Map cells ──────────────────────────────────────────────────────────────
+// Collision flags use the original bit values (CMap_Cell.mCollide_*).
+const C_SOLID = 1, C_CREATURE = 32, C_PLAYER = 64, C_OBJECT = 128;
+const C_NONMOVABLE = C_SOLID | C_CREATURE | C_OBJECT | C_PLAYER;
+const C_NOSPAWN = C_CREATURE | C_OBJECT;
+let cellCreature = new Int16Array(1), cellPlayer = new Uint8Array(1), cellObject = [];
 
-function clearDecals() {
-  decalCtx.setTransform(1, 0, 0, 1, 0, 0);
-  decalCtx.clearRect(0, 0, decalLayer.width, decalLayer.height);
-  worldTransform(decalCtx);
-}
-
-// ─── Rooms ──────────────────────────────────────────────────────────────────
 function loadRoom(index) {
-  const def = ROOMS[index];
-  const tiles = def.map.map(row => row.split(''));
-  const starts = [], barrelSpots = [], wallRows = [], pillars = [], gates = [];
-  for (let r = 0; r < ROWS; r++) {
-    for (let c = 0; c < COLS; c++) {
-      const t = tiles[r][c], x = c * CELL + CELL / 2, y = r * CELL + CELL / 2;
-      if (t === '1' || t === '2') { starts[+t - 1] = { x, y }; tiles[r][c] = '.'; }
-      if (t === 'b') { barrelSpots.push({ x, y }); tiles[r][c] = '.'; }
-    }
-  }
-  // Pillars are drawn as one block with a pyramid cap, so group touching P cells.
-  const seen = new Set();
-  for (let r = 0; r < ROWS; r++) {
-    const row = [];
-    for (let c = 0; c < COLS; c++) {
-      if (tiles[r][c] === '#') row.push(c);
-      if (tiles[r][c] !== 'P' || seen.has(r * COLS + c)) continue;
-      const g = { c0: c, c1: c, r0: r, r1: r }, stack = [[c, r]];
-      seen.add(r * COLS + c);
-      while (stack.length) {
-        const [pc, pr] = stack.pop();
-        g.c0 = Math.min(g.c0, pc); g.c1 = Math.max(g.c1, pc);
-        g.r0 = Math.min(g.r0, pr); g.r1 = Math.max(g.r1, pr);
-        for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-          const nc = pc + dc, nr = pr + dr;
-          if (nc < 0 || nr < 0 || nc >= COLS || nr >= ROWS) continue;
-          if (tiles[nr][nc] !== 'P' || seen.has(nr * COLS + nc)) continue;
-          seen.add(nr * COLS + nc);
-          stack.push([nc, nr]);
-        }
-      }
-      pillars.push(g);
-    }
-    wallRows.push(row);
-  }
-  // Door cells along each edge form gates where the horde comes in.
-  const edge = (side, open) => {
-    let start = -1;
-    open.forEach((isOpen, i) => {
-      if (isOpen && start < 0) start = i;
-      if (start >= 0 && (!isOpen || i === open.length - 1)) {
-        gates.push(makeGate(side, start, isOpen ? i : i - 1));
-        start = -1;
-      }
-    });
-  };
-  edge('n', tiles[0].map(t => t === 'D'));
-  edge('s', tiles[ROWS - 1].map(t => t === 'D'));
-  edge('w', tiles.map(row => row[0] === 'D'));
-  edge('e', tiles.map(row => row[COLS - 1] === 'D'));
-  room = { index, def, tiles, starts, barrelSpots, wallRows, pillars, gates };
-  room.shadow = wallShadows();
+  const def = ROOMS[index], cols = def.cols, rows = def.rows;
+  mapOrder = 0;
+  const solid = new Uint8Array(cols * rows);
+  def.map.forEach((row, r) => { for (let c = 0; c < cols; c++) if (row[c] === '#') solid[r * cols + c] = 1; });
+  room = { index, def, cols, rows, solid, nav: new Array(cols * rows), navSeen: new Int32Array(cols * rows).fill(-1), navStamp: new Float64Array(cols * rows).fill(-1), navigation: null };
+  cellCreature = new Int16Array(cols * rows);
+  cellPlayer = new Uint8Array(cols * rows);
+  cellObject = new Array(cols * rows).fill(null);
   renderFloor();
 }
 
-function makeGate(side, a, b) {
-  const lo = a * CELL, hi = (b + 1) * CELL, mid = (lo + hi) / 2;
-  if (side === 'n') return { side, lo, hi, cx: mid, cy: 0, dx: 0, dy: 1 };
-  if (side === 's') return { side, lo, hi, cx: mid, cy: FLOOR_H, dx: 0, dy: -1 };
-  if (side === 'w') return { side, lo, hi, cx: 0, cy: mid, dx: 1, dy: 0 };
-  return { side, lo, hi, cx: FLOOR_W, cy: mid, dx: -1, dy: 0 };
+const inMap = (c, r) => c >= 0 && r >= 0 && c < room.cols && r < room.rows;
+const cellIndex = (c, r) => r * room.cols + c;
+const isSolid = (c, r) => !inMap(c, r) || room.solid[r * room.cols + c] === 1;
+
+function flagsAt(c, r) {
+  if (!inMap(c, r)) return C_SOLID;
+  const i = r * room.cols + c;
+  return (room.solid[i] ? C_SOLID : 0) | (cellCreature[i] > 0 ? C_CREATURE : 0) | (cellPlayer[i] ? C_PLAYER : 0) | (cellObject[i] ? C_OBJECT : 0);
 }
 
-const tileAt = (c, r) => room.tiles[clamp(r, 0, ROWS - 1)][clamp(c, 0, COLS - 1)];
-const blockAt = (c, r) => (c < 0 || r < 0 || c >= COLS || r >= ROWS ? null : blockGrid[r * COLS + c]);
-function isWall(c, r) {
-  if (c < 0 || r < 0 || c >= COLS || r >= ROWS) return false;
-  const t = room.tiles[r][c];
-  return t === '#' || t === 'P';
+// CMap_Cell.NavReal_d: a diagonal step also needs both side cells.
+function stepFlags(c, r, d) {
+  const [dx, dy] = DIRS[d & 7];
+  let f = flagsAt(c + dx, r + dy);
+  if (dx && dy) f |= flagsAt(c + dx, r) | flagsAt(c, r + dy);
+  return f;
 }
 
-// Walls stop everyone. Doors let zombies in but keep players inside.
-// Outside the map, a cell inherits the edge tile beside it, so each door
-// continues outward as a corridor that the horde walks in along.
-function solidCell(c, r, player) {
-  const t = tileAt(c, r);
-  if (t === '#' || t === 'P') return true;
-  if (t === 'D') return player;
-  return !!blockAt(c, r);
+function setObjectCell(c, r, obj) { if (inMap(c, r)) { cellObject[cellIndex(c, r)] = obj; } }
+function clearObjectCell(c, r, obj) {
+  if (inMap(c, r) && cellObject[cellIndex(c, r)] === obj) { cellObject[cellIndex(c, r)] = null; }
 }
 
-function blockedAt(x, y, r, player) {
-  const c0 = Math.floor((x - r) / CELL), c1 = Math.floor((x + r) / CELL);
-  const r0 = Math.floor((y - r) / CELL), r1 = Math.floor((y + r) / CELL);
-  for (let row = r0; row <= r1; row++) {
-    for (let col = c0; col <= c1; col++) {
-      if (!solidCell(col, row, player)) continue;
-      const nx = clamp(x, col * CELL, col * CELL + CELL), ny = clamp(y, row * CELL, row * CELL + CELL);
-      if ((x - nx) ** 2 + (y - ny) ** 2 < r * r) return true;
-    }
+// Creatures reserve the cell they are walking into (SetCollideDirection).
+function reserveCell(e, c, r) {
+  releaseCell(e);
+  if (!inMap(c, r)) return;
+  cellCreature[cellIndex(c, r)]++;
+  e.cell = cellIndex(c, r);
+}
+function releaseCell(e) {
+  if (e.cell >= 0 && e.cell < cellCreature.length && cellCreature[e.cell] > 0) cellCreature[e.cell]--;
+  e.cell = -1;
+}
+
+function markPlayers() {
+  cellPlayer.fill(0);
+  for (const p of players) {
+    if (p.down) continue;
+    const c = Math.floor(p.x), r = Math.floor(p.y);
+    if (inMap(c, r)) cellPlayer[cellIndex(c, r)] = 1;
   }
-  for (const b of barrels) if ((x - b.x) ** 2 + (y - b.y) ** 2 < (r + BARREL_R) ** 2) return true;
+}
+
+// ─── Navigation ─────────────────────────────────────────────────────────────
+// CMap_Cell.Nav_Update expands five distance rings per call. A partially
+// processed ring resumes next tick if its five-cell work batches exceed 3 ms.
+// Distances retain their old values while a new wave is in progress.
+function refreshNav() {
+  const started = Date.now(), size = room.cols * room.rows;
+  let state = room.navigation;
+  if (!state || state.phase === 'finished') {
+    state = room.navigation = { phase: 'restart', session: (state?.session || 0) + 1, distance: 0, next: [], current: [], stamp: ticks * 1000 / fps() };
+  }
+  const visit = i => {
+    if (i < 0 || i >= size || room.solid[i] || cellObject[i] || room.navSeen[i] === state.session) return;
+    room.navSeen[i] = state.session;
+    room.navStamp[i] = state.stamp;
+    room.nav[i] = state.distance;
+    state.next.push(i);
+  };
+  const spread = i => {
+    const c = i % room.cols;
+    if (c + 1 < room.cols) visit(i + 1);
+    visit(i + room.cols);
+    if (c > 0) visit(i - 1);
+    visit(i - room.cols);
+  };
+  const beginRing = () => { state.current = state.next; state.next = []; };
+  const finish = () => { state.phase = state.next.length ? 'resume' : 'finished'; };
+  if (state.phase === 'restart') {
+    // AS2 for..in visits players newest first, including a downed partner.
+    for (let k = players.length - 1; k >= 0; k--) {
+      const p = players[k], c = Math.floor(p.x), r = Math.floor(p.y);
+      if (inMap(c, r)) visit(cellIndex(c, r));
+    }
+    for (let ring = 0; ring < 5 && state.next.length; ring++) {
+      beginRing();
+      for (let k = state.current.length - 1; k >= 0; k--) spread(state.current[k]);
+      state.current = [];
+      state.distance++;
+    }
+    finish();
+  } else if (state.phase === 'resume') {
+    for (let ring = 0; ring < 5 && state.next.length; ring++) {
+      beginRing();
+      while (state.current.length) {
+        for (let batch = 0; batch < 5 && state.current.length; batch++) spread(state.current.pop());
+        if (Date.now() - started > 3) { state.phase = 'continue'; return; }
+      }
+      state.distance++;
+    }
+    finish();
+  } else if (state.phase === 'continue') {
+    while (state.current.length) {
+      for (let batch = 0; batch < 5 && state.current.length; batch++) spread(state.current.pop());
+      if (Date.now() - started > 3) return;
+    }
+    state.distance++;
+    finish();
+  }
+}
+
+const navAt = (c, r) => (inMap(c, r) ? room.nav[cellIndex(c, r)] : undefined);
+
+let navScans = 0;
+function navDirection(c, r, cur, want, force) {
+  const index = inMap(c, r) ? cellIndex(c, r) : -1;
+  // The original accepts a distance from a wave less than two seconds old.
+  if (index >= 0 && ticks * 1000 / fps() - room.navStamp[index] < 2000) {
+    const here = navAt(c, r);
+    const closer = d => navAt(c + DIRS[d][0], r + DIRS[d][1]) < here;
+    if (closer(want) && !(stepFlags(c, r, want) & C_NONMOVABLE)) return want;
+    if (closer(cur) && !(stepFlags(c, r, cur) & C_NONMOVABLE)) return cur;
+    if (!force && ++navScans > 5) return -1;
+    // sortOn(NUMERIC | DESCENDING | RETURNINDEXEDARRAY), then read backwards.
+    const order = Array.from({ length: 8 }, (_, d) => d).sort((a, b) => navAt(c + DIRS[b][0], r + DIRS[b][1]) - navAt(c + DIRS[a][0], r + DIRS[a][1]));
+    for (let k = order.length - 1; k >= 0; k--) if (!(stepFlags(c, r, order[k]) & C_NONMOVABLE)) return order[k];
+    return -1;
+  }
+  const free = d => !(stepFlags(c, r, d & 7) & C_NONMOVABLE);
+  if (free(want)) return want;
+  let side;
+  if (cur !== want) {
+    if (free(cur)) return cur & 7;
+    side = want <= cur ? (Math.abs(want - cur) <= 4 ? -1 : 1) : (Math.abs(want - cur) <= 4 ? 1 : -1);
+  } else side = Math.random() < 0.5 ? -1 : 1;
+  for (const k of want & 1 ? [1, 3] : [2]) {
+    if (free(want + k * side)) return (want + k * side) & 7;
+    if (free(want - k * side)) return (want - k * side) & 7;
+  }
+  return -1;
+}
+
+// ─── Collision ──────────────────────────────────────────────────────────────
+// CMap_Collide.QCollide_Map: any solid cell under the square of half-size r.
+function boxHitsSolid(x, y, r) {
+  const c0 = Math.floor(x - r), c1 = Math.floor(x + r), r0 = Math.floor(y - r), r1 = Math.floor(y + r);
+  for (let row = r0; row <= r1; row++) for (let col = c0; col <= c1; col++) if (isSolid(col, row)) return true;
   return false;
 }
 
-// Axis-separated movement slides along walls instead of sticking to them.
-function move(e, dx, dy, player) {
-  if (blockedAt(e.x, e.y, e.r, player)) {
-    // Already overlapping something (a barrel dropped on top, say): let it walk out.
-    const nx = e.x + dx, ny = e.y + dy;
-    if (!solidCell(Math.floor(nx / CELL), Math.floor(ny / CELL), player)) { e.x = nx; e.y = ny; }
-    return;
-  }
-  const steps = Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dy)) / 6));
-  const sx = dx / steps, sy = dy / steps;
-  for (let i = 0; i < steps; i++) {
-    if (sx && !blockedAt(e.x + sx, e.y, e.r, player)) e.x += sx;
-    if (sy && !blockedAt(e.x, e.y + sy, e.r, player)) e.y += sy;
-  }
+// CMap_Collide.Collide_Map: try the move, then x alone, then y alone.
+let collided = false;
+function collideMap(x, y, dx, dy, r) {
+  if (boxHitsSolid(x + dx, y + dy, r) === false) return [x + dx, y + dy];
+  collided = true;
+  if (!boxHitsSolid(x + dx, y, r)) return [x + dx, y];
+  if (!boxHitsSolid(x, y + dy, r)) return [x, y + dy];
+  return [x, y];
 }
 
-// A straight move blocked by a corner slips sideways around it.
-function nudge(e, dx, dy, player) {
-  const len = Math.hypot(dx, dy);
-  for (let off = 2; off <= 16; off += 2) {
-    for (const s of [1, -1]) {
-      const ox = dy ? s * off : 0, oy = dx ? s * off : 0;
-      if (blockedAt(e.x + ox, e.y + oy, e.r, player) || blockedAt(e.x + ox + dx, e.y + oy + dy, e.r, player)) continue;
-      move(e, Math.sign(ox) * Math.min(len, Math.abs(ox)), Math.sign(oy) * Math.min(len, Math.abs(oy)), player);
-      return;
+function collidables(self, x, y, radius) {
+  const list=[];
+  for(const p of players)if(p!==self && p._uid!==self?.ownerUid && !p.down && p.state!=='respawn')list.push(p);
+  for(const z of zombies)if(z!==self && z._uid!==self?.ownerUid && z.solid)list.push(z);
+  for(const b of barrels)if(b.solid)list.push(b);
+  for(const b of blocks)if(b.solid)list.push(b);
+  const bounds=x===undefined?null:mapAreaBounds(x-radius,y-radius,x+radius,y+radius);
+  return list.filter(e=>!bounds || Math.floor(e.x)>=bounds[0] && Math.floor(e.y)>=bounds[1] && Math.floor(e.x)<=bounds[2] && Math.floor(e.y)<=bounds[3]).sort((a,b)=>{
+    const cellA=Math.floor(a.y)*room.cols+Math.floor(a.x),cellB=Math.floor(b.y)*room.cols+Math.floor(b.x);
+    return cellB-cellA || b._mapOrder-a._mapOrder;
+  });
+}
+
+// CMap_Collide.Collide_Mapwho enumerates cells and their registered objects
+// backwards, pushing the point successively out of each intersecting circle.
+function pushOut(x,y,r,self) {
+  for(const t of collidables(self,x,y,r)) {
+    const dx=x-t.x,dy=y-t.y,min=r+t.r,d2=dx*dx+dy*dy;
+    if(d2>=min*min)continue;
+    collided=true;
+    // Keep a coincident-centre calculation finite on the authoritative server.
+    if(d2<1e-12)continue;
+    const d=Math.sqrt(d2),f=(min-d)/d;
+    x+=dx*f;y+=dy*f;
+  }
+  return [x,y];
+}
+
+// CMap_Collide.PlayerCollide (with the "Object collision" option) and
+// CreatureCollide for knock-backs.
+function moveThing(e, dx, dy, things, passes) {
+  if (isSolid(Math.floor(e.x), Math.floor(e.y))) return false;
+  let out = [e.x, e.y];
+  for (let i = 0; i < passes; i++) {
+    collided = false;
+    if (things) {
+      const [px, py] = pushOut(e.x + dx, e.y + dy, e.r, e);
+      dx = px - e.x; dy = py - e.y;
+    }
+    out = collideMap(e.x, e.y, dx, dy, e.r * (players.includes(e) ? 0.85 : 1));
+    if (!collided) break;
+  }
+  const moved = out[0] !== e.x || out[1] !== e.y;
+  e.x = out[0]; e.y = out[1];
+  trackMapwho(e);
+  return moved;
+}
+
+// ─── Original cell-stepped line queries ─────────────────────────────────────
+// CMap.GetCellBounds (default expanded area), unlike its separate _Min path.
+function mapAreaBounds(x0, y0, x1, y1) {
+  return [Math.max(0, Math.round(x0) - 1), Math.max(0, Math.round(y0) - 1),
+    Math.min(room.cols - 1, Math.round(x1)), Math.min(room.rows - 1, Math.round(y1))];
+}
+
+// Collide_Line / Affect_Line advance their rectangle by _StepSize = 1 cell.
+// The .04 supplied by bullet callers is the area radius, not the step size.
+// AVM1 enumerates the collected cell array in reverse insertion order.
+function* lineCellBatches(x0, y0, x1, y1, radius) {
+  const length = Math.hypot(x1 - x0, y1 - y0), dx = length ? (x1 - x0) / length : 0, dy = length ? (y1 - y0) / length : 0;
+  const seen = new Set();
+  const scan = (x, y) => {
+    const [c0, r0, c1, r1] = mapAreaBounds(x, y, x + radius * 2, y + radius * 2), cells = [];
+    for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) {
+      const i = cellIndex(c, r);
+      if (!seen.has(i)) { seen.add(i); cells.push(i); }
+    }
+    return cells.reverse();
+  };
+  for (let n = 0; n < length; n++) yield scan(x0 - radius + dx * n, y0 - radius + dy * n);
+  // The original final rectangle is anchored at p2, without subtracting radius.
+  yield scan(x1, y1);
+}
+
+function cellLineWall(c, r, x0, y0, dx, dy) {
+  if (!room.solid[cellIndex(c, r)]) return null;
+  let a = null, b = null;
+  if (dx) {
+    const x = dx > 0 ? c : c + 1, y = y0 + (x - x0) * dy / dx;
+    if (y >= r && y <= r + 1) a = { x, y };
+  }
+  if (dy) {
+    const y = dy > 0 ? r : r + 1, x = x0 + (y - y0) * dx / dy;
+    if (x >= c && x <= c + 1) b = { x, y };
+  }
+  if (!a) return b;
+  if (!b) return a;
+  return (a.x - x0) ** 2 + (a.y - y0) ** 2 < (b.x - x0) ** 2 + (b.y - y0) ** 2 ? a : b;
+}
+
+function lineBuckets(things) {
+  const buckets = new Map();
+  for (const thing of things) {
+    const c = Math.floor(thing.x), r = Math.floor(thing.y);
+    if (!inMap(c, r)) continue;
+    const i = cellIndex(c, r);
+    if (!buckets.has(i)) buckets.set(i, []);
+    buckets.get(i).push(thing);
+  }
+  for (const list of buckets.values()) list.sort((a, b) => (b._mapOrder ?? b._uid ?? b.id) - (a._mapOrder ?? a._uid ?? a.id));
+  return buckets;
+}
+
+// CLine.QDistance_PointToLine_SQR uses the infinite line (no endpoint clamp).
+// A thing is eligible only through cells reached by the scan, with its actual
+// radius; the bullet area radius does not make targets bigger.
+function pointOnLine(thing, x0, y0, dx, dy) {
+  const d2 = dx * dx + dy * dy;
+  if (!d2) return false;
+  const f = ((thing.x - x0) * dx + (thing.y - y0) * dy) / d2;
+  return (thing.x - x0 - dx * f) ** 2 + (thing.y - y0 - dy * f) ** 2 < thing.r ** 2;
+}
+
+function lineHit(x0, y0, x1, y1, radius, things) {
+  const dx = x1 - x0, dy = y1 - y0, length = Math.hypot(dx, dy), buckets = lineBuckets(things);
+  if (!length) return { t: 0, x: x1, y: y1, thing: null, wall: false };
+  for (const cells of lineCellBatches(x0, y0, x1, y1, radius)) {
+    let best = null, distance = Infinity;
+    for (const i of cells) {
+      const c = i % room.cols, r = Math.floor(i / room.cols);
+      const wall = cellLineWall(c, r, x0, y0, dx, dy);
+      let candidate = wall ? { ...wall, thing: null, wall: true } : null;
+      if (!candidate) for (const thing of buckets.get(i) || []) {
+        if (pointOnLine(thing, x0, y0, dx, dy)) { candidate = { x: thing.x, y: thing.y, thing, wall: false }; break; }
+      }
+      if (!candidate) continue;
+      const d = (candidate.x - x0) ** 2 + (candidate.y - y0) ** 2;
+      if (d < distance) { distance = d; best = candidate; }
+    }
+    if (best) {
+      const d = Math.sqrt(distance);
+      // Original hit position moves toward p1 along the target-centre vector,
+      // not to the analytic ray/circle intersection on the bullet's ray.
+      if (best.thing && d) {
+        const f = (d - best.thing.r) / d;
+        best.x = x0 + (best.x - x0) * f; best.y = y0 + (best.y - y0) * f;
+      }
+      return { t: Math.hypot(best.x - x0, best.y - y0), ...best };
     }
   }
+  return { t: length, x: x1, y: y1, thing: null, wall: false };
 }
 
-// ─── Navigation: one flow field per player, rebuilt a few times a second ───
-const N = COLS * ROWS;
-const navCost = new Float32Array(N);
-const fields = [new Float32Array(N).fill(Infinity), new Float32Array(N).fill(Infinity)];
-const heap = { i: new Int32Array(N * 9), v: new Float32Array(N * 9), n: 0, top: 0 };
-const STEPS = [[1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1], [1, 1, 1.414], [1, -1, 1.414], [-1, 1, 1.414], [-1, -1, 1.414]];
-
-function heapPush(i, v) {
-  let k = heap.n++;
-  while (k > 0) {
-    const p = (k - 1) >> 1;
-    if (heap.v[p] <= v) break;
-    heap.i[k] = heap.i[p]; heap.v[k] = heap.v[p]; k = p;
+function lineAll(x0, y0, x1, y1, radius, things) {
+  const dx = x1 - x0, dy = y1 - y0, buckets = lineBuckets(things), found = [];
+  for (const cells of lineCellBatches(x0, y0, x1, y1, radius)) for (const i of cells) {
+    for (const thing of buckets.get(i) || []) if (pointOnLine(thing, x0, y0, dx, dy)) found.push(thing);
   }
-  heap.i[k] = i; heap.v[k] = v;
+  // Affect_Line enumerates its concatenated list backwards as well.
+  return found.reverse();
 }
 
-function heapPop() {
-  const top = heap.i[0];
-  heap.top = heap.v[0];
-  const i = heap.i[--heap.n], v = heap.v[heap.n];
-  let k = 0;
-  for (;;) {
-    let c = 2 * k + 1;
-    if (c >= heap.n) break;
-    if (c + 1 < heap.n && heap.v[c + 1] < heap.v[c]) c++;
-    if (heap.v[c] >= v) break;
-    heap.i[k] = heap.i[c]; heap.v[k] = heap.v[c]; k = c;
-  }
-  heap.i[k] = i; heap.v[k] = v;
-  return top;
-}
-
-// 0 = impassable. Fake walls are passable at a price: the horde walks
-// around them when it can and claws through them when it can't.
-function updateNavCost() {
-  for (let r = 0; r < ROWS; r++) {
-    for (let c = 0; c < COLS; c++) navCost[r * COLS + c] = isWall(c, r) ? 0 : 1;
-  }
-  for (const b of blocks) navCost[b.r * COLS + b.c] = 14;
-  for (const b of barrels) {
-    const c = Math.floor(b.x / CELL), r = Math.floor(b.y / CELL);
-    if (c >= 0 && r >= 0 && c < COLS && r < ROWS) navCost[r * COLS + c] = 0;
-  }
-}
-
-function buildField(field, x, y) {
-  field.fill(Infinity);
-  const sc = clamp(Math.floor(x / CELL), 0, COLS - 1), sr = clamp(Math.floor(y / CELL), 0, ROWS - 1), s = sr * COLS + sc;
-  field[s] = 0;
-  heap.n = 0;
-  heapPush(s, 0);
-  while (heap.n) {
-    const i = heapPop(), d = heap.top;
-    if (d > field[i]) continue;
-    const ic = i % COLS, ir = (i - ic) / COLS;
-    for (const [dc, dr, len] of STEPS) {
-      const nc = ic + dc, nr = ir + dr;
-      if (nc < 0 || nr < 0 || nc >= COLS || nr >= ROWS) continue;
-      const ni = nr * COLS + nc, cost = navCost[ni];
-      if (!cost) continue;
-      if (dc && dr && (!navCost[ir * COLS + nc] || !navCost[nr * COLS + ic])) continue;
-      const nd = d + cost * len;
-      if (nd < field[ni]) { field[ni] = nd; heapPush(ni, nd); }
-    }
-  }
-}
-
-function refreshNav() {
-  if (navDirty) updateNavCost();
-  navDirty = false;
-  navTimer = 0.25;
-  for (const p of players) if (!p.down) buildField(fields[p.id], p.x, p.y);
-}
-
-function toward(e, x, y) {
-  const dx = x - e.x, dy = y - e.y, d = Math.hypot(dx, dy) || 1;
-  return { x: dx / d, y: dy / d, d, block: null };
-}
-
-// Step to the neighbouring cell that is closest to the target along the field.
-function flowStep(z, field) {
-  const c = clamp(Math.floor(z.x / CELL), 0, COLS - 1), r = clamp(Math.floor(z.y / CELL), 0, ROWS - 1);
-  if (z.x < 0 || z.y < 0 || z.x >= FLOOR_W || z.y >= FLOOR_H) return toward(z, c * CELL + CELL / 2, r * CELL + CELL / 2);
-  let best = field[r * COLS + c], bc = -1, br = -1;
-  for (const [dc, dr] of STEPS) {
-    const nc = c + dc, nr = r + dr;
-    if (nc < 0 || nr < 0 || nc >= COLS || nr >= ROWS) continue;
-    if (dc && dr && (!navCost[r * COLS + nc] || !navCost[nr * COLS + c])) continue;
-    const v = field[nr * COLS + nc];
-    if (v < best) { best = v; bc = nc; br = nr; }
-  }
-  if (bc < 0) return null;
-  const step = toward(z, bc * CELL + CELL / 2, br * CELL + CELL / 2);
-  step.block = blockAt(bc, br);
-  return step;
-}
-
-// Walls, barrels and fake walls all block sight; the corridors outside doors don't.
-function clearLine(x0, y0, x1, y1) {
-  const n = Math.ceil(Math.hypot(x1 - x0, y1 - y0) / 12);
-  for (let i = 1; i < n; i++) {
-    const c = Math.floor((x0 + ((x1 - x0) * i) / n) / CELL), r = Math.floor((y0 + ((y1 - y0) * i) / n) / CELL);
-    if (c < 0 || r < 0 || c >= COLS || r >= ROWS) continue;
-    if (navCost[r * COLS + c] !== 1) return false;
-  }
-  return true;
+// CMap_Affect.AffectArea uses expanded GetCellBounds, not GetCellBounds_Min.
+function thingsInArea(x0, y0, x1, y1, list) {
+  const [c0, r0, c1, r1] = mapAreaBounds(x0, y0, x1, y1);
+  return list.filter(t => { const c = Math.floor(t.x), r = Math.floor(t.y); return c >= c0 && c <= c1 && r >= r0 && r <= r1; });
 }

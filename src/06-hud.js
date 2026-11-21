@@ -1,168 +1,188 @@
-// ─── HUD ────────────────────────────────────────────────────────────────────
+// ─── HUD (CHud) ─────────────────────────────────────────────────────────────
+// Positions, scales and fonts are the original clips': Hud.ScoreTotal at the
+// top centre (score, multiplier and its mcTimer ring), Hud_PlayerFrags in
+// death match, HUD.Player over each player (weapon:ammo and the mcLife bar),
+// Hud.Message lines rising from the bottom and Hud.Score points flying to
+// the total.
 function drawHud() {
-  // Big score at the top, with the multiplier ring beside it.
-  const text = pad(score, 9);
-  const width = label(text, W / 2, 30, 44, '#fff', 'center', 7);
-  const mx = W / 2 + width / 2 + 42, my = 30, pulse = 1 + Math.max(0, combo.pulse) * 0.35 - Math.max(0, -combo.pulse) * 0.15;
+  if (game.mode === 3) drawFrags();
+  else drawScore();
+  drawMessages();
+}
+
+// Hud_PlayerFrags: "Player N" and that player's deaths (PadFrags) above each
+// view; the names swap with the views (mViewSide_DeathMatch).
+function drawFrags() {
+  if (players.length > 2) { drawPartyFrags(); return; }
+  // One view (online "own view"): player 1 on the left, player 2 on the right,
+  // clear of the phone's pause button.
+  const split = splitMode(), panels = split ? [9.9, 513.65] : [9.9, view.w - 126.35 - (view.fluid ? 60 / view.z : 0)], rects = splitRects();
+  players.forEach((p, i) => {
+    const slot = split ? (i === 0 ? viewSide : 1 - viewSide) : i;
+    // On a phone the labels sit in each view's top left corner.
+    const x = view.fluid && split ? rects[slot].x0 + 4 : panels[slot], y = view.fluid ? (split ? rects[slot].y0 : 0) + 16 : 78.1 - 27.25 + 0.5355 * 25;
+    hudText(`Player ${i + 1}`, x + 1.05, y, 21.4, 'left');
+    hudText(pad(p.deaths || 0, 2), x + 87.4, y, 21.4, 'left');
+  });
+}
+
+// Online parties of three to six: everyone's attributed kills, one line per
+// slot in its colour, this player marked, the leader first.
+// Label column, then the kills, with a clear gap (both carry a 2 px outline).
+const PARTY_FRAGS = { x: 8, counter: 150, gap: 10, size: 14.2 };
+function drawPartyFrags() {
+  const me = net.me?.playerId, rows = players.slice().sort((a, b) => (b.frags ?? 0) - (a.frags ?? 0) || a.id - b.id);
+  const { x, counter, gap, size } = PARTY_FRAGS, top = 16, line = 17;
+  hudText(`First to ${game.fragLimit} kills`, x, top, 13, 'left', '#ffffff');
+  rows.forEach((p, i) => {
+    const y = top + line * (i + 1) + 2;
+    hudText(fitLabel(`P${p.id + 1} `, slotName(p.id), p.id === me ? ' (you)' : '', size, counter - gap - 4), x, y, size, 'left', SLOT_COLORS[p.id] || '#fff');
+    hudText(pad(p.frags ?? 0, 2), x + counter, y, size, 'left', '#ffffff');
+  });
+}
+
+// prefix + name + suffix, the name cut with an ellipsis until the whole label,
+// measured in the HUD's bold font at this size, is no wider than max pixels.
+function fitLabel(prefix, name, suffix, size, max) {
   ctx.save();
-  ctx.translate(mx, my);
-  ctx.scale(pulse, pulse);
-  ctx.fillStyle = 'rgba(10,10,10,0.72)';
-  ctx.beginPath(); ctx.arc(0, 0, 25, 0, TAU); ctx.fill();
-  ctx.lineWidth = 5;
-  ctx.strokeStyle = 'rgba(255,255,255,0.18)';
-  ctx.beginPath(); ctx.arc(0, 0, 22, 0, TAU); ctx.stroke();
-  ctx.strokeStyle = combo.pulse < 0 ? '#ff6a4a' : '#fff';
-  ctx.beginPath(); ctx.arc(0, 0, 22, -Math.PI / 2, -Math.PI / 2 + TAU * clamp(combo.bar, 0, 1)); ctx.stroke();
-  label(`x${combo.level}`, 0, 1, combo.level > 9 ? 19 : 23, '#fff', 'center', 4);
+  ctx.font = `700 ${size}px ${HUD_FONT}`;
+  ctx.letterSpacing = '0px';
+  const width = t => ctx.measureText(t).width, chars = [...name];
+  let text = prefix + name + suffix;
+  if (width(text) > max) {
+    let n = chars.length;
+    do text = prefix + chars.slice(0, --n).join('') + '…' + suffix; while (n > 0 && width(text) > max);
+  }
   ctx.restore();
+  return text;
+}
 
-  label(`LEVEL ${level}`, 22, 24, 26, '#fff', 'left', 6);
-  label(`${toSpawn + zombies.length} zombies left`, 22, 52, 15, '#e8e0d0', 'left', 4);
-  label(`BEST ${pad(Math.max(score, getBest(game.roomIndex, game.mode)), 9)}`, W - 22, 24, 18, '#e8e0d0', 'right', 5);
-  const next = WEAPONS.find(w => w.unlock > combo.best);
-  if (next) label(`Next: ${next.name} at x${next.unlock}`, W - 22, 50, 14, '#ffd08a', 'right', 4);
+// Hud.ScoreTotal: tfScore (40 px at 0.765), tfMultiple "xN" (24 px at 0.823)
+// and mcTimer (101 frames at 0.68) showing mMultiplierTickRatio.
+function drawScore() {
+  const cx = view.w / 2;
+  hudText(pad(score, 12), cx, -1.7 + 0.765 * 24, 30.6, 'center');
+  const timer = art.sprites.hudTimer;
+  if (timer) drawSprite('hudTimer', Math.min(100, Math.floor(clamp(combo.ratio, 0, 1) * 101)), cx + 62.05, 23.25, 1, 0, 0.68, 0.68);
+  hudText(`x${combo.level}`, cx + 60.1 + 0.823 * 34.2, 29.35 + 0.823 * 14.4, 19.75, 'center');
+  drawScoreFlights();
+}
 
-  if (players.length === 1) drawArsenal(players[0], 'left');
-  else { drawArsenal(players[0], 'left'); drawArsenal(players[1], 'right'); }
-
-  if (banner) {
-    const a = clamp(Math.min(banner.t / 0.25, (banner.life - banner.t) / 0.5), 0, 1);
-    ctx.globalAlpha = a;
-    label(banner.title, W / 2, H * 0.36, 78, '#fff', 'center', 10);
-    label(banner.sub, W / 2, H * 0.36 + 56, 24, '#ffe2b0', 'center', 6);
+// CHud.AddScore: "+N" leaves the kill at 5 pixels a tick toward the total,
+// 5 % faster every tick, fading over the last 140 pixels.
+function drawScoreFlights() {
+  for (const t of texts) {
+    if (t.kind !== 'score') continue;
+    const x0 = sx(t.x) - cam.x, y0 = sy(t.y) - cam.y, dx = view.w / 2 - x0, dy = -y0, d = Math.hypot(dx, dy) || 1;
+    const run = 5 * (Math.pow(1.05, t.t) - 1) / 0.05, y = y0 + (dy / d) * run;
+    if (y <= 0) continue;
+    ctx.globalAlpha = y < 140 ? clamp((y - 40) / 100, 0, 1) : 1;
+    hudText(t.text, x0 + (dx / d) * run, y, 14.2, 'center');
     ctx.globalAlpha = 1;
-  }
-  if (toast) {
-    const a = clamp(Math.min(toast.t / 0.2, (toast.life - toast.t) / 0.4), 0, 1), y = 88 - (1 - Math.min(1, toast.t / 0.2)) * 12;
-    ctx.globalAlpha = a;
-    ctx.font = `22px ${FONT}`;
-    const msg = `${toast.kind}  ·  ${toast.text}`, w = ctx.measureText(msg).width + 40;
-    ctx.fillStyle = '#c7361a';
-    ctx.strokeStyle = '#111';
-    ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.roundRect(W / 2 - w / 2, y - 18, w, 36, 6); ctx.fill(); ctx.stroke();
-    label(msg, W / 2, y + 1, 22, '#fff', 'center', 4);
-    ctx.globalAlpha = 1;
-  }
-  // Red edges when someone is close to going down.
-  const low = Math.min(...players.filter(p => !p.down).map(p => p.hp), 100);
-  const hurt = Math.max(0, ...players.map(p => p.hurt));
-  const k = Math.max(low < 35 ? (1 - low / 35) * (0.6 + 0.4 * Math.sin(clock * 6)) : 0, hurt * 1.6);
-  if (k > 0) {
-    const g = ctx.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, H * 0.85);
-    g.addColorStop(0, 'rgba(180,0,0,0)');
-    g.addColorStop(1, `rgba(180,0,0,${0.45 * clamp(k, 0, 1)})`);
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, W, H);
   }
 }
 
-// Unlocked weapons plus the next one to aim for, at the bottom edge.
-function drawArsenal(p, align) {
-  const list = WEAPONS.map((w, i) => i).filter(unlocked);
-  const next = WEAPONS.findIndex(w => w.unlock > combo.best);
-  if (next >= 0) list.push(next);
-  const slot = players.length > 1 ? 60 : 66, gap = players.length > 1 ? 3 : 4, total = list.length * slot + (list.length - 1) * gap, y = H - 47;
-  let x = align === 'left' ? 16 : W - 16 - total;
-  for (const i of list) {
-    const w = WEAPONS[i], locked = !unlocked(i), on = !locked && p.weapon === i, ammo = p.ammo[i];
-    ctx.globalAlpha = locked ? 0.55 : 1;
-    ctx.fillStyle = on ? '#f4f2ec' : 'rgba(14,14,14,0.78)';
-    ctx.strokeStyle = on ? '#e2441a' : '#111';
-    ctx.lineWidth = on ? 3 : 2;
-    ctx.beginPath(); ctx.roundRect(x, y, slot, 38, 5); ctx.fill(); ctx.stroke();
-    ctx.font = `11px ${FONT}`;
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'top';
-    ctx.fillStyle = on ? '#555' : '#9a9a9a';
-    if (players.length === 1) ctx.fillText(String(i + 1), x + 5, y + 4);
-    ctx.textAlign = 'center';
-    ctx.fillStyle = on ? '#111' : '#eee';
-    ctx.fillText(w.short, x + slot / 2 + (players.length === 1 ? 3 : 0), y + 4);
-    ctx.font = `16px ${FONT}`;
-    ctx.fillStyle = locked ? '#ffd08a' : on ? '#111' : ammo > 0 ? '#fff' : '#777';
-    ctx.fillText(locked ? `x${w.unlock}` : ammo === Infinity ? '∞' : String(ammo), x + slot / 2, y + 18);
-    ctx.globalAlpha = 1;
-    x += slot + gap;
+// CHud.AddMessage: each line starts at the bottom centre and climbs a quarter
+// of its remaining 100 pixels a tick; a new line pushes the others 19 higher.
+// Lines last three seconds.
+const hudMessages = [];
+function addHudMessage(text, color) {
+  for (const m of hudMessages) m.move += 19;
+  hudMessages.push({ text, color, y: view.h, move: 100, at: performance.now() });
+}
+function tickHudMessages() {
+  for (const m of hudMessages) { const step = m.move * 0.25; m.y -= step; m.move -= step; }
+}
+function drawMessages() {
+  const now = performance.now();
+  while (hudMessages.length && now - hudMessages[0].at >= 3000) hudMessages.shift();
+  for (const m of hudMessages) hudText(m.text, view.w / 2, m.y + 1.45 + 0.72 * 14.4, 17.3, 'center', m.color);
+  if (game.online && net.lag > 0.6 && game.state === 'playing') hudText('Waiting for the server…', view.w / 2, 92, 14.2, 'center', '#b0c4de');
+  else if (net.noteText && performance.now() < net.noteUntil) hudText(net.noteText, view.w / 2, 92, 14.2, 'center', '#b0c4de');
+}
+
+// CHud.UpdatePlayer: mcAmmo "Short:ammo" (just the name when ammo is
+// unlimited) and mcLife at frame life × 101 + 1, over the player's feet.
+function drawPlayerTags() {
+  for (const p of players) {
+    if (p.down || p.state === 'respawn' || p.state === 'dying' || p.state === 'dead') continue;
+    if (p.inv > 0 && p.inv % 2) continue;
+    const w = WEAPONS[p.weapon] || WEAPONS[0], ammo = p.ammo[p.weapon];
+    const x = sx(p.x), y = sy(p.y);
+    hudText(w.short + (ammo === Infinity || ammo === null ? '' : `:${ammo}`), x, y - 65.9 - 7.95 + 0.593 * 15.2, 13, 'center', '#fff', true, true, -0.6);
+    // Online, four character designs can repeat: each player also carries
+    // its slot number and name in the slot's colour.
+    if (game.online && players.length > 1) {
+      hudText(fitLabel(`P${p.id + 1} `, slotName(p.id), '', 12, 90), x, y - 84, 12, 'center', SLOT_COLORS[p.id] || '#fff');
+    }
+    const frame = Math.floor(Math.min(Math.max(1, 101 * clamp(p.hp / p.max, 0, 1) + 1), 101)) - 1;
+    drawSprite('hudLife', frame, x + 1, y - 57.4, 1, 0, 0.6667, 0.75);
   }
 }
 
-// ─── Sound: everything is synthesized ───────────────────────────────────────
+// ─── Sound (CSound) ─────────────────────────────────────────────────────────
+// The original samples. Each registered sound is one voice: playing it again
+// restarts it. Positional sounds are always played centred at full volume
+// (CThing.PlaySound passes the origin), times the registered volume.
 const sfx = (() => {
-  let ac = null, master = null, noise = null;
+  let ac = null, master = null, decoding = null;
   let enabled = (() => { try { return localStorage.getItem('deadrooms:sound') !== 'off'; } catch { return true; } })();
-  const live = () => enabled && ac && ac.state === 'running' && !game.demo;
+  const buffers = {}, voices = new Map(), ambient = new Set();
+  const VOLUME = { 'Creature.Player.Scream.1': 0.7, 'Creature.Player.Scream.2': 0.7, 'Creature.Zombie.Hit': 0.3, 'Shot.Grenade.Bounce': 0.4 };
+  const volumeOf = key => VOLUME[key] ?? (key.startsWith('Creature.Zombie.Ambience') ? 0.4 : 1);
+  const live = () => enabled && ac && ac.state === 'running';
 
   function init() {
     if (ac) { if (ac.state === 'suspended') ac.resume(); return; }
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return;
     ac = new AC();
-    const comp = ac.createDynamicsCompressor();
-    comp.threshold.value = -14;
-    comp.ratio.value = 4;
     master = ac.createGain();
-    master.gain.value = 0.5;
-    master.connect(comp);
-    comp.connect(ac.destination);
-    noise = ac.createBuffer(1, ac.sampleRate, ac.sampleRate);
-    const data = noise.getChannelData(0);
-    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    master.gain.value = 0.9;
+    master.connect(ac.destination);
+    decode();
   }
-  function burst({ dur, freq, q = 1, type = 'bandpass', gain = 0.4, sweep = 0, delay = 0 }) {
-    const t = ac.currentTime + delay, src = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
-    src.buffer = noise;
-    f.type = type;
-    f.frequency.setValueAtTime(freq, t);
-    if (sweep) f.frequency.exponentialRampToValueAtTime(sweep, t + dur);
-    f.Q.value = q;
-    g.gain.setValueAtTime(gain, t);
-    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    src.connect(f); f.connect(g); g.connect(master);
-    src.start(t, Math.random() * 0.5, dur + 0.05);
+  function decode() {
+    if (!ac || !art.ready || decoding) return decoding;
+    decoding = Promise.all(Object.entries(art.sounds).map(async ([key, bytes]) => {
+      try { buffers[key] = await ac.decodeAudioData(bytes.slice(0)); } catch (err) { console.warn('sound', key, err); }
+    }));
+    return decoding;
   }
-  function tone({ freq, to = freq, dur, type = 'sine', gain = 0.2, delay = 0, attack = 0.005 }) {
-    const t = ac.currentTime + delay, o = ac.createOscillator(), g = ac.createGain();
-    o.type = type;
-    o.frequency.setValueAtTime(freq, t);
-    if (to !== freq) o.frequency.exponentialRampToValueAtTime(to, t + dur);
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(gain, t + attack);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.connect(g); g.connect(master);
-    o.start(t); o.stop(t + dur + 0.02);
+  function start(key, voice, onEnd) {
+    const buf = buffers[key];
+    if (!buf) return null;
+    const old = voices.get(voice);
+    if (old) { try { old.src.stop(); } catch {} }
+    const src = ac.createBufferSource(), g = ac.createGain();
+    src.buffer = buf;
+    g.gain.value = volumeOf(key);
+    src.connect(g); g.connect(master);
+    const v = { src };
+    src.onended = () => { if (voices.get(voice) === v) voices.delete(voice); if (onEnd) onEnd(v); };
+    voices.set(voice, v);
+    src.start();
+    return v;
   }
-  const play = fn => (...args) => { if (live()) fn(...args); };
   return {
     init,
+    decode,
     get enabled() { return enabled; },
     toggle() {
       enabled = !enabled;
       try { localStorage.setItem('deadrooms:sound', enabled ? 'on' : 'off'); } catch {}
+      if (!enabled) for (const v of voices.values()) { try { v.src.stop(); } catch {} }
       return enabled;
     },
-    shot: play(id => {
-      if (id === 'pistol') { burst({ dur: 0.12, freq: 1700, q: 0.8, gain: 0.5 }); tone({ freq: 170, to: 60, dur: 0.1, type: 'triangle', gain: 0.35 }); }
-      if (id === 'uzi') { burst({ dur: 0.06, freq: 2400, q: 0.9, gain: 0.3 }); tone({ freq: 130, to: 70, dur: 0.05, type: 'triangle', gain: 0.2 }); }
-      if (id === 'shotgun') { burst({ dur: 0.34, freq: 1100, type: 'lowpass', gain: 0.75, sweep: 200 }); tone({ freq: 95, to: 40, dur: 0.22, gain: 0.6 }); }
-      if (id === 'rocket') burst({ dur: 0.55, freq: 380, q: 1.5, gain: 0.4, sweep: 1800 });
-      if (id === 'railgun') { tone({ freq: 2200, to: 160, dur: 0.38, type: 'sawtooth', gain: 0.12 }); burst({ dur: 0.25, freq: 4000, type: 'highpass', gain: 0.25 }); }
-      if (id === 'throw') burst({ dur: 0.15, freq: 700, q: 2, gain: 0.18, sweep: 1400 });
-    }),
-    boom: play((size = 1) => { burst({ dur: 0.9 * size, freq: 1100, type: 'lowpass', gain: 0.9, sweep: 70 }); tone({ freq: 72, to: 28, dur: 0.6, gain: 0.8 }); }),
-    splat: play(() => burst({ dur: 0.16, freq: 520, type: 'lowpass', gain: 0.32, sweep: 140 })),
-    hurt: play(() => { tone({ freq: 220, to: 90, dur: 0.18, type: 'square', gain: 0.1 }); burst({ dur: 0.1, freq: 400, type: 'lowpass', gain: 0.3 }); }),
-    down: play(() => tone({ freq: 300, to: 55, dur: 0.9, type: 'sawtooth', gain: 0.12 })),
-    pickup: play(() => { tone({ freq: 660, dur: 0.09, type: 'square', gain: 0.07 }); tone({ freq: 990, dur: 0.14, type: 'square', gain: 0.07, delay: 0.07 }); }),
-    unlock: play(() => [523, 659, 784, 1047].forEach((freq, i) => tone({ freq, dur: 0.24, type: 'triangle', gain: 0.16, delay: i * 0.08 }))),
-    level: play(() => [196, 247, 294].forEach((freq, i) => tone({ freq, dur: 0.7, type: 'sawtooth', gain: 0.05, delay: i * 0.12, attack: 0.05 }))),
-    place: play(() => { tone({ freq: 180, to: 110, dur: 0.08, type: 'square', gain: 0.08 }); burst({ dur: 0.08, freq: 900, gain: 0.2 }); }),
-    crumble: play(() => burst({ dur: 0.4, freq: 600, type: 'lowpass', gain: 0.5, sweep: 120 })),
-    click: play(() => tone({ freq: 900, dur: 0.03, type: 'square', gain: 0.04 })),
-    deny: play(() => tone({ freq: 140, dur: 0.12, type: 'square', gain: 0.07 })),
-    tink: play(() => tone({ freq: 1800, dur: 0.04, type: 'square', gain: 0.03 })),
-    fireball: play(() => burst({ dur: 0.45, freq: 300, q: 2, gain: 0.25, sweep: 900 })),
-    groan: play(() => { const f = rand(70, 105); tone({ freq: f, to: f * 0.7, dur: rand(0.5, 0.9), type: 'sawtooth', gain: 0.045, attack: 0.15 }); }),
+    // In-game sounds; menus use ui() (Click and Click2).
+    play(key, voice = key) { if (live() && game.state !== 'menu') start(key, voice); },
+    ui(key) { if (live()) start(key, 'ui:' + key); },
+    ambience(key) {
+      if (!live()) return;
+      const v = start(key, 'amb:' + key, done => ambient.delete(done));
+      if (v) ambient.add(v);
+    },
+    ambienceCount: () => ambient.size,
+    stopAmbience() { for (const v of ambient) { try { v.src.stop(); } catch {} } ambient.clear(); },
   };
 })();

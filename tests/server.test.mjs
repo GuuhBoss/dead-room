@@ -57,6 +57,20 @@ test('HEAD sends headers only', async () => {
   assert.equal(res.body, '');
 });
 
+test('original audio, fonts and previews have browser-compatible MIME types', async () => {
+  for (const [path, type] of [
+    ['/assets/sounds/Effect.Explosion.mp3', 'audio/mpeg'],
+    ['/assets/fonts/calibri.woff', 'font/woff'],
+    ['/assets/previews/01.jpg', 'image/jpeg'],
+  ]) {
+    const response = await raw(path, 'HEAD');
+    assert.equal(response.status, 200, path);
+    assert.equal(response.headers['content-type'], type, path);
+    assert.ok(Number(response.headers['content-length']) > 0, path);
+    assert.equal(response.body, '');
+  }
+});
+
 test('rejects missing files, bad paths and other methods', async () => {
   assert.equal((await raw('/nope.js')).status, 404);
   assert.equal((await raw('/../package.json')).status, 404);
